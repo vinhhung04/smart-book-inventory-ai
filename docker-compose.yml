@@ -11,6 +11,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
 
   # 2. Quản lý DB (Giao diện web)
   pgadmin:
@@ -28,23 +29,43 @@ services:
   inventory-service:
     build: ./inventory-service
     container_name: inventory-service
+    command: sh -c "npx prisma db push --skip-generate --accept-data-loss && npm run start"
     ports:
-      - "3001:3001"
+      - "3003:3001"
     environment:
       - DATABASE_URL=postgresql://user:password@db:5432/inventory
+      - JWT_SECRET=your_super_secret_key_change_me
     depends_on:
       - db
 
-  # 4. Frontend (Smartbook UI)
+  # 4. Authentication Service
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    command: sh -c "npx prisma db push --skip-generate && npm run start"
+    ports:
+      - "3004:3002"
+    environment:
+      - PORT=3002
+      - DATABASE_URL=postgresql://user:password@db:5432/inventory?schema=auth
+      - JWT_SECRET=your_super_secret_key_change_me
+    depends_on:
+      - db
+
+  # 5. Frontend (Smartbook UI)
   smartbook-ui:
     build: ./smartbook-ui
     container_name: smartbook-ui
     ports:
       - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:3003
+      - VITE_AUTH_BASE_URL=http://localhost:3004
     depends_on:
       - inventory-service
+      - auth-service
 
-  # 5. Trí tuệ nhân tạo (Ollama)
+  # 6. Trí tuệ nhân tạo (Ollama)
   ollama:
     image: ollama/ollama
     container_name: ollama
@@ -53,7 +74,7 @@ services:
     volumes:
       - ./ollama_data:/root/.ollama
 
-  # 6. AI Service (Python/OCR)
+  # 7. AI Service (Python/OCR)
   ai-service:
     build: ./ai-service
     container_name: ai-service

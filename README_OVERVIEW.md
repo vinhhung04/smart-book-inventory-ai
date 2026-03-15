@@ -35,16 +35,16 @@ Luot goi co ban:
 ## 4) 🔌 Ports mac dinh
 Theo ma nguon hien tai:
 - UI: `5173`
-- Inventory Service: `3001`
-- Auth Service: `3002`
+- Inventory Service (Docker host): `3003` -> container `3001`
+- Auth Service (Docker host): `3004` -> container `3002`
 - AI Service: `8000`
 - Ollama: `11434`
 - PostgreSQL: `5432`
 - pgAdmin: `8080`
 
 Luu y quan trong:
-- `auth-service` dang chay rieng (PORT mac dinh `3002`) trong ma nguon.
-- `docker-compose.yml` hien co `inventory-service`, `smartbook-ui`, `ai-service`, `ollama`, `db`, `pgadmin`, nhung chua co service `auth-service`.
+- Khi chay local khong Docker, `inventory-service` mac dinh `3001` va `auth-service` mac dinh `3002`.
+- `docker-compose.yml` da gom day du `inventory-service`, `auth-service`, `smartbook-ui`, `ai-service`, `ollama`, `db`, `pgadmin`.
 
 ## 5) 🌐 API chinh (tom tat)
 Auth (`auth-service`):
@@ -81,11 +81,10 @@ docker compose up --build
 
 Sau khi chay:
 - UI: http://localhost:5173
-- Inventory API: http://localhost:3001
+- Inventory API: http://localhost:3003
+- Auth API: http://localhost:3004
 - AI API: http://localhost:8000
 - pgAdmin: http://localhost:8080
-
-Neu can dang nhap, ban van can chay them `auth-service` (do compose chua include service nay).
 
 ### Cach B: 💻 Chay local tung service
 1. Chay DB/Ollama bang Docker (neu can).
@@ -96,8 +95,8 @@ Neu can dang nhap, ban van can chay them `auth-service` (do compose chua include
 
 ## 8) ⚙️ Bien moi truong quan trong
 Frontend (`smartbook-ui/.env`):
-- `VITE_API_BASE_URL=http://localhost:3001`
-- `VITE_AUTH_BASE_URL=http://localhost:3002`
+- Chay local: `VITE_API_BASE_URL=http://localhost:3001`, `VITE_AUTH_BASE_URL=http://localhost:3002`
+- Chay Docker Compose: `VITE_API_BASE_URL=http://localhost:3003`, `VITE_AUTH_BASE_URL=http://localhost:3004`
 
 Inventory/Auth:
 - `JWT_SECRET`
