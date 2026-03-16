@@ -116,6 +116,13 @@ export async function getAllBooks() {
   return apiRequest('/api/books', { method: 'GET' });
 }
 
+export async function updateBookDetails(id, payload) {
+  return apiRequest(`/api/books/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getWarehouses() {
   return apiRequest('/api/warehouses', { method: 'GET' });
 }
@@ -129,4 +136,42 @@ export async function createWarehouse(payload) {
 
 export async function getWarehouseLocations(warehouseId) {
   return apiRequest(`/api/warehouses/${warehouseId}/locations`, { method: 'GET' });
+}
+
+export async function createGoodsReceipt(payload) {
+  return apiRequest('/api/goods-receipts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getGoodsReceipts() {
+  return apiRequest('/api/goods-receipts', { method: 'GET' });
+}
+
+export async function getGoodsReceiptDetail(id) {
+  return apiRequest(`/api/goods-receipts/${id}`, { method: 'GET' });
+}
+
+export async function updateGoodsReceipt(id, payload) {
+  return apiRequest(`/api/goods-receipts/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function findBookByBarcode(barcode) {
+  const safeBarcode = encodeURIComponent(String(barcode || '').trim());
+  return apiRequest(`/api/books/barcode/${safeBarcode}`, { method: 'GET' });
+}
+
+export async function createIncompleteBook(payload) {
+  return apiRequest('/api/books/incomplete', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getStockMovements() {
+  return apiRequest('/api/stock-movements', { method: 'GET' });
 }
