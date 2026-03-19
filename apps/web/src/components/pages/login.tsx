@@ -10,7 +10,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [credentials, setCredentials] = useState({ identifier: "admin@smartbook.vn", password: "password123" });
+  const [credentials, setCredentials] = useState({ identifier: "", password: "" });
 
   const handleLogin = async () => {
     if (!credentials.identifier || !credentials.password) {
@@ -80,12 +80,18 @@ export function LoginPage() {
           <h2 className="text-[24px] mb-2 tracking-[-0.02em]" style={{ fontWeight: 700 }}>Welcome back</h2>
           <p className="text-slate-500 mb-8">Sign in to your account to continue</p>
 
-          <div className="space-y-4 mb-6">
+          <form
+            className="space-y-4 mb-6"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleLogin();
+            }}
+          >
             <div>
               <label className="text-[12px] text-slate-600 block mb-2" style={{ fontWeight: 550 }}>Email or Username</label>
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={credentials.identifier} onChange={e => setCredentials({ ...credentials, identifier: e.target.value })} type="text" placeholder="admin@smartbook.vn"
+                <input value={credentials.identifier} onChange={e => setCredentials({ ...credentials, identifier: e.target.value })} type="text" placeholder="Enter email or username" autoComplete="username"
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-[10px] text-[13px] outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-400/60 transition-all" />
               </div>
             </div>
@@ -94,9 +100,9 @@ export function LoginPage() {
               <label className="text-[12px] text-slate-600 block mb-2" style={{ fontWeight: 550 }}>Password</label>
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={credentials.password} onChange={e => setCredentials({ ...credentials, password: e.target.value })} type={showPassword ? "text" : "password"} placeholder="password123"
+                <input value={credentials.password} onChange={e => setCredentials({ ...credentials, password: e.target.value })} type={showPassword ? "text" : "password"} placeholder="Enter password" autoComplete="current-password"
                   className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-[10px] text-[13px] outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-400/60 transition-all" />
-                <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
@@ -106,12 +112,11 @@ export function LoginPage() {
               <input type="checkbox" className="w-4 h-4 rounded border-slate-300" />
               <span className="text-[12px] text-slate-600">Remember me</span>
             </label>
-          </div>
-
-          <motion.button onClick={handleLogin} disabled={isSubmitting} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-            className="w-full py-3 rounded-[10px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[13px] font-semibold shadow-lg shadow-blue-600/20 hover:shadow-xl transition-all mb-4 disabled:opacity-70 disabled:cursor-not-allowed">
-            {isSubmitting ? "Signing in..." : "Sign In"}
-          </motion.button>
+            <motion.button type="submit" disabled={isSubmitting} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              className="w-full py-3 rounded-[10px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[13px] font-semibold shadow-lg shadow-blue-600/20 hover:shadow-xl transition-all mb-4 disabled:opacity-70 disabled:cursor-not-allowed">
+              {isSubmitting ? "Signing in..." : "Sign In"}
+            </motion.button>
+          </form>
 
           <div className="text-center text-[12px] text-slate-600">
             Don't have an account?{" "}
@@ -120,7 +125,7 @@ export function LoginPage() {
             </NavLink>
           </div>
 
-          <button className="w-full mt-6 py-2.5 rounded-[10px] border border-slate-200 text-slate-700 text-[12px] hover:bg-slate-50 transition-all">
+          <button type="button" className="w-full mt-6 py-2.5 rounded-[10px] border border-slate-200 text-slate-700 text-[12px] hover:bg-slate-50 transition-all">
             Forgot password?
           </button>
         </motion.div>

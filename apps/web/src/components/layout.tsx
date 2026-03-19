@@ -2,7 +2,6 @@ import { Outlet } from "react-router";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { useState } from "react";
-import { Toaster } from "sonner";
 
 export function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -16,7 +15,6 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
-      <Toaster position="bottom-right" richColors closeButton toastOptions={{ style: { borderRadius: "12px", fontSize: "13px", fontWeight: 500 } }} />
     </div>
   );
 }
