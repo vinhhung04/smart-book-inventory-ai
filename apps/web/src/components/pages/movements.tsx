@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, ArrowDown, ArrowUp, ArrowRightLeft, Minus, BookOpen, RotateCcw, ChevronDown } from "lucide-react";
 import { StatusBadge } from "../status-badge";
 import { PageWrapper, FadeItem } from "../motion-utils";
 import { motion, AnimatePresence } from "motion/react";
-import { NavLink } from "react-router";
+import { stockMovementService, type StockMovement } from "@/services/stock-movement";
+import { getApiErrorMessage } from "@/services/api";
+import { toast } from "sonner";
 
 const movementTypes = {
   inbound: { label: "Inbound", color: "emerald", icon: ArrowDown, gradient: "from-emerald-500 to-teal-500" },
@@ -14,26 +16,53 @@ const movementTypes = {
   return: { label: "Return", color: "cyan", icon: RotateCcw, gradient: "from-cyan-500 to-blue-500" },
 };
 
-const movementsData = [
-  { id: "SM-051", type: "inbound", book: "Clean Code", fromTo: "GR-2026-0051", qty: 25, warehouse: "WH-01", location: "A3-2-05", user: "Admin", date: "Mar 20, 09:45 AM", notes: "Stock received and verified" },
-  { id: "SM-050", type: "outbound", book: "Design Patterns", fromTo: "DEL-2026-0015", qty: 2, warehouse: "WH-02", location: "B1-4-12", user: "Staff A", date: "Mar 19, 14:20 PM", notes: "Customer delivery" },
-  { id: "SM-049", type: "transfer", book: "Head First Design Patterns", fromTo: "WH-01→WH-02", qty: 5, warehouse: "WH-01", location: "A3-3-01", user: "Admin", date: "Mar 19, 11:30 AM", notes: "Rebalancing stock" },
-  { id: "SM-048", type: "adjustment", book: "Effective Java", fromTo: "INV-2026-008", qty: -1, warehouse: "WH-01", location: "B2-3-10", user: "Staff B", date: "Mar 18, 16:45 PM", notes: "Physical count adjustment" },
-  { id: "SM-047", type: "borrow", book: "Working Effectively with Legacy Code", fromTo: "BRW-2026-0008", qty: 1, warehouse: "WH-01", location: "D1-2-03", user: "Admin", date: "Mar 18, 13:10 PM", notes: "Borrowed by John Doe" },
-  { id: "SM-046", type: "return", book: "Refactoring", fromTo: "BRW-2026-0004", qty: 1, warehouse: "WH-01", location: "A1-1-02", user: "Staff C", date: "Mar 17, 10:00 AM", notes: "Book returned, condition good" },
-  { id: "SM-045", type: "inbound", book: "Programming Rust", fromTo: "GR-2026-0050", qty: 18, warehouse: "WH-01", location: "C1-1-04", user: "Admin", date: "Mar 17, 09:20 AM", notes: "Initial receipt" },
-  { id: "SM-044", type: "transfer", book: "Test Driven Development", fromTo: "WH-02→WH-01", qty: 3, warehouse: "WH-03", location: "A1-2-06", user: "Staff A", date: "Mar 16, 15:30 PM", notes: "Cross-warehouse transfer" },
-];
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("vi-VN");
+}
 
 export function MovementsPage() {
+  const [movements, setMovements] = useState<StockMovement[]>([]);
+  const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [expandedId, setExpandedId] = useState(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const filtered = movementsData.filter(m => {
+  const loadMovements = async () => {
+    try {
+      setLoading(true);
+      const response = await stockMovementService.getAll();
+      setMovements(response);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Khong tai duoc lich su stock movements"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadMovements();
+  }, []);
+
+  const filtered = movements.filter(m => {
     if (typeFilter !== "all" && m.type !== typeFilter) return false;
-    return searchQuery === "" || m.book.toLowerCase().includes(searchQuery.toLowerCase()) || m.id.includes(searchQuery);
+    if (!searchQuery.trim()) return true;
+    const keyword = searchQuery.trim().toLowerCase();
+    return (
+      m.book_title.toLowerCase().includes(keyword)
+      || m.movement_number.toLowerCase().includes(keyword)
+      || String(m.barcode || "").toLowerCase().includes(keyword)
+    );
   });
+
+  const summary = useMemo(() => {
+    return {
+      inbound: movements.filter((m) => m.type === "inbound").reduce((sum, m) => sum + m.quantity, 0),
+      outbound: movements.filter((m) => m.type === "outbound").reduce((sum, m) => sum + Math.abs(m.quantity), 0),
+      transfer: movements.filter((m) => m.type === "transfer").length,
+    };
+  }, [movements]);
 
   return (
     <PageWrapper className="space-y-5">
@@ -45,7 +74,7 @@ export function MovementsPage() {
             </div>
             <div>
               <h1 className="tracking-[-0.02em]">Stock Movements</h1>
-              <p className="text-[12px] text-slate-400 mt-0.5">{movementsData.length} movements · View audit trail</p>
+              <p className="text-[12px] text-slate-400 mt-0.5">{movements.length} movements · View audit trail</p>
             </div>
           </div>
         </div>
@@ -74,13 +103,15 @@ export function MovementsPage() {
       <FadeItem>
         <div className="space-y-3">
           <AnimatePresence>
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-14 text-[13px] text-slate-400">Dang tai stock movements...</div>
+            ) : filtered.length === 0 ? (
               <div className="text-center py-14">
                 <ArrowRightLeft className="w-8 h-8 text-cyan-300 mx-auto mb-2" />
                 <p className="text-[13px] text-slate-400">No movements found</p>
               </div>
             ) : filtered.map((m, i) => {
-              const typeConfig = movementTypes[m.type];
+              const typeConfig = movementTypes[m.type as keyof typeof movementTypes] || movementTypes.inbound;
               const Icon = typeConfig.icon;
               return (
                 <motion.div key={m.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
@@ -91,15 +122,15 @@ export function MovementsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2.5 mb-1">
-                        <span className="text-[13px]" style={{ fontWeight: 650 }}>{m.id}</span>
+                        <span className="text-[13px]" style={{ fontWeight: 650 }}>{m.movement_number || m.id}</span>
                         <StatusBadge label={typeConfig.label} variant={typeConfig.color} dot />
-                        <span className="text-[11px] text-slate-400 ml-auto">{m.date}</span>
+                        <span className="text-[11px] text-slate-400 ml-auto">{formatDate(m.created_at)}</span>
                       </div>
                       <div className="flex items-center gap-2 text-[12px] text-slate-600">
-                        <span style={{ fontWeight: 550 }}>{m.book}</span>
+                        <span style={{ fontWeight: 550 }}>{m.book_title}</span>
                         <span className="text-slate-400">·</span>
-                        <span className={m.qty > 0 ? "text-emerald-600" : "text-rose-600"} style={{ fontWeight: 550 }}>
-                          {m.qty > 0 ? "+" : ""}{m.qty} units
+                        <span className={m.delta >= 0 ? "text-emerald-600" : "text-rose-600"} style={{ fontWeight: 550 }}>
+                          {m.delta >= 0 ? "+" : ""}{m.delta} units
                         </span>
                       </div>
                     </div>
@@ -116,11 +147,11 @@ export function MovementsPage() {
                         <div className="p-4 space-y-3">
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                             {[
-                              { label: "From/To", value: m.fromTo },
-                              { label: "Warehouse", value: m.warehouse },
-                              { label: "Location", value: m.location, mono: true },
-                              { label: "User", value: m.user },
-                              { label: "Qty", value: `${m.qty > 0 ? "+" : ""}${m.qty}`, bold: true },
+                              { label: "From/To", value: m.transfer_note || `${m.from_location_code || "-"} -> ${m.to_location_code || "-"}` },
+                              { label: "Warehouse", value: m.warehouse_name || m.warehouse_code || "-" },
+                              { label: "Location", value: m.to_location_code || m.from_location_code || "-", mono: true },
+                              { label: "User", value: m.created_by_user_id || "-" },
+                              { label: "Qty", value: `${m.delta >= 0 ? "+" : ""}${m.delta}`, bold: true },
                             ].map(f => (
                               <div key={f.label}>
                                 <p className="text-[10px] text-slate-400 uppercase mb-1" style={{ fontWeight: 550 }}>{f.label}</p>
@@ -132,7 +163,9 @@ export function MovementsPage() {
                           </div>
                           <div>
                             <p className="text-[10px] text-slate-400 uppercase mb-1" style={{ fontWeight: 550 }}>Notes</p>
-                            <p className="text-[12px] text-slate-600">{m.notes}</p>
+                            <p className="text-[12px] text-slate-600">
+                              Ref: {m.reference_type || "-"} / {m.reference_id || "-"}
+                            </p>
                           </div>
                         </div>
                       </motion.div>
@@ -149,10 +182,10 @@ export function MovementsPage() {
       <FadeItem>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Total Inbound", value: movementsData.filter(m => m.type === "inbound").reduce((s, m) => s + m.qty, 0), color: "from-emerald-50 to-teal-50/50 border-emerald-100/60" },
-            { label: "Total Outbound", value: movementsData.filter(m => m.type === "outbound").reduce((s, m) => s + Math.abs(m.qty), 0), color: "from-rose-50 to-red-50/50 border-rose-100/60" },
-            { label: "Transfers", value: movementsData.filter(m => m.type === "transfer").length, color: "from-blue-50 to-indigo-50/50 border-blue-100/60" },
-            { label: "Adjustments", value: movementsData.filter(m => m.type === "adjustment").length, color: "from-amber-50 to-orange-50/50 border-amber-100/60" },
+            { label: "Total Inbound", value: summary.inbound, color: "from-emerald-50 to-teal-50/50 border-emerald-100/60" },
+            { label: "Total Outbound", value: summary.outbound, color: "from-rose-50 to-red-50/50 border-rose-100/60" },
+            { label: "Transfers", value: summary.transfer, color: "from-blue-50 to-indigo-50/50 border-blue-100/60" },
+            { label: "Records", value: movements.length, color: "from-amber-50 to-orange-50/50 border-amber-100/60" },
           ].map(s => (
             <div key={s.label} className={`bg-gradient-to-br ${s.color} rounded-[12px] border p-3`}>
               <p className="text-[11px] text-slate-500 mb-1" style={{ fontWeight: 550 }}>{s.label}</p>

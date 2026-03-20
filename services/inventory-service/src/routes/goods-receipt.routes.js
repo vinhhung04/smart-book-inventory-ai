@@ -6,12 +6,13 @@ const {
 	createGoodsReceipt,
 	updateGoodsReceipt,
 } = require('../controllers/goods-receipt.controller');
+const { authorizeAnyPermission } = require('../middlewares/auth.middleware');
 
 const router = express.Router();
 
-router.get('/', getGoodsReceipts);
-router.get('/:id', getGoodsReceiptById);
-router.post('/', createGoodsReceipt);
-router.patch('/:id', updateGoodsReceipt);
+router.get('/', authorizeAnyPermission(['inventory.stock.read', 'inventory.stock.write']), getGoodsReceipts);
+router.get('/:id', authorizeAnyPermission(['inventory.stock.read', 'inventory.stock.write']), getGoodsReceiptById);
+router.post('/', authorizeAnyPermission(['inventory.stock.write']), createGoodsReceipt);
+router.patch('/:id', authorizeAnyPermission(['inventory.stock.write']), updateGoodsReceipt);
 
 module.exports = router;

@@ -111,6 +111,7 @@ migrate:
 	@echo "[INFO] Running database migrations..."
 	docker compose --profile dev run --rm auth-db-push
 	docker compose --profile dev run --rm inventory-db-push
+	docker compose --profile dev run --rm borrow-db-push
 	@echo "[INFO] Migrations complete!"
 
 shell-db:

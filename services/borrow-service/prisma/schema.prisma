@@ -1,0 +1,172 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model customers {
+  id                 String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_code      String                  @unique @db.VarChar(30)
+  full_name          String                  @db.VarChar(150)
+  email              String?                 @unique @db.Citext
+  phone              String?                 @unique @db.VarChar(30)
+  birth_date         DateTime?               @db.Date
+  address            String?
+  status             String                  @default("ACTIVE") @db.VarChar(20)
+  total_fine_balance Decimal                 @default(0) @db.Decimal(12, 2)
+  created_at         DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime                @default(now()) @db.Timestamptz(6)
+  customer_memberships customer_memberships[]
+  customer_notifications customer_notifications[]
+  customer_preferences customer_preferences?
+  loan_reservations  loan_reservations[]
+  loan_transactions  loan_transactions[]
+
+  @@index([status], map: "idx_customers_status")
+}
+
+model membership_plans {
+  id                       String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                     String                 @unique @db.VarChar(30)
+  name                     String                 @db.VarChar(100)
+  description              String?
+  max_active_loans         Int                    @default(5)
+  max_loan_days            Int                    @default(14)
+  max_renewal_count        Int                    @default(2)
+  reservation_hold_hours   Int                    @default(24)
+  fine_per_day             Decimal                @default(0) @db.Decimal(10, 2)
+  lost_item_fee_multiplier Decimal                @default(1) @db.Decimal(5, 2)
+  is_active                Boolean                @default(true)
+  created_at               DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime               @default(now()) @db.Timestamptz(6)
+  customer_memberships     customer_memberships[]
+}
+
+model customer_memberships {
+  id                        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id               String           @db.Uuid
+  plan_id                   String           @db.Uuid
+  card_number               String           @unique @db.VarChar(40)
+  start_date                DateTime         @default(now()) @db.Date
+  end_date                  DateTime?        @db.Date
+  status                    String           @default("ACTIVE") @db.VarChar(20)
+  max_active_loans_override Int?
+  max_loan_days_override    Int?
+  note                      String?
+  created_at                DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime         @default(now()) @db.Timestamptz(6)
+  customers                 customers        @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  membership_plans          membership_plans @relation(fields: [plan_id], references: [id], onUpdate: NoAction)
+
+  @@index([customer_id], map: "idx_customer_memberships_customer_id")
+  @@index([status], map: "idx_customer_memberships_status")
+}
+
+model customer_preferences {
+  customer_id        String    @id @db.Uuid
+  notify_email       Boolean   @default(true)
+  notify_sms         Boolean   @default(false)
+  notify_in_app      Boolean   @default(true)
+  preferred_language String    @default("vi") @db.VarChar(10)
+  updated_at         DateTime  @default(now()) @db.Timestamptz(6)
+  customers          customers @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model loan_reservations {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reservation_number String    @unique @db.VarChar(40)
+  customer_id        String    @db.Uuid
+  variant_id         String    @db.Uuid
+  inventory_unit_id  String?   @db.Uuid
+  warehouse_id       String    @db.Uuid
+  pickup_location_id String?   @db.Uuid
+  quantity           Int       @default(1)
+  source_channel     String    @default("WEB") @db.VarChar(20)
+  status             String    @default("PENDING") @db.VarChar(30)
+  reserved_at        DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at         DateTime  @db.Timestamptz(6)
+  notes              String?
+  created_by_user_id String?   @db.Uuid
+  updated_at         DateTime  @default(now()) @db.Timestamptz(6)
+  customers          customers @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  loan_transactions  loan_transactions[]
+
+  @@index([status, expires_at], map: "idx_loan_reservations_status_expires")
+}
+
+model loan_transactions {
+  id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  loan_number           String            @unique @db.VarChar(40)
+  customer_id           String            @db.Uuid
+  warehouse_id          String            @db.Uuid
+  handled_by_user_id    String            @db.Uuid
+  source_reservation_id String?           @db.Uuid
+  borrow_date           DateTime          @default(now()) @db.Timestamptz(6)
+  due_date              DateTime          @db.Timestamptz(6)
+  closed_at             DateTime?         @db.Timestamptz(6)
+  status                String            @default("BORROWED") @db.VarChar(20)
+  total_items           Int               @default(0)
+  notes                 String?
+  created_at            DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime          @default(now()) @db.Timestamptz(6)
+  customers             customers         @relation(fields: [customer_id], references: [id], onUpdate: NoAction)
+  loan_reservations     loan_reservations? @relation(fields: [source_reservation_id], references: [id], onUpdate: NoAction)
+  loan_items            loan_items[]
+
+  @@index([customer_id, status], map: "idx_loan_transactions_customer_id")
+  @@index([due_date, status], map: "idx_loan_transactions_due_date")
+}
+
+model loan_items {
+  id                      String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  loan_id                 String             @db.Uuid
+  variant_id              String             @db.Uuid
+  inventory_unit_id       String?            @db.Uuid
+  item_barcode            String?            @db.VarChar(100)
+  due_date                DateTime           @db.Timestamptz(6)
+  return_date             DateTime?          @db.Timestamptz(6)
+  returned_to_warehouse_id String?           @db.Uuid
+  returned_to_location_id String?            @db.Uuid
+  item_condition_on_checkout String          @default("GOOD") @db.VarChar(20)
+  item_condition_on_return String?           @db.VarChar(20)
+  status                  String             @default("BORROWED") @db.VarChar(20)
+  fine_amount             Decimal            @default(0) @db.Decimal(10, 2)
+  lost_fee_amount         Decimal            @default(0) @db.Decimal(10, 2)
+  notes                   String?
+  loan_transactions       loan_transactions  @relation(fields: [loan_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([loan_id, status], map: "idx_loan_items_loan_status")
+}
+
+model customer_notifications {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id   String    @db.Uuid
+  channel       String    @db.VarChar(20)
+  template_code String?   @db.VarChar(50)
+  subject       String?   @db.VarChar(200)
+  body          String
+  reference_type String?  @db.VarChar(50)
+  reference_id  String?   @db.Uuid
+  status        String    @default("PENDING") @db.VarChar(20)
+  scheduled_at  DateTime  @default(now()) @db.Timestamptz(6)
+  sent_at       DateTime? @db.Timestamptz(6)
+  read_at       DateTime? @db.Timestamptz(6)
+  metadata      Json      @default("{}")
+  customers     customers @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([status, scheduled_at], map: "idx_customer_notifications_status")
+}
+
+model borrow_audit_logs {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actor_user_id String?  @db.Uuid
+  action_name   String   @db.VarChar(100)
+  entity_type   String   @db.VarChar(50)
+  entity_id     String?  @db.Uuid
+  before_data   Json?
+  after_data    Json?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+}

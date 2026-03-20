@@ -70,6 +70,96 @@ ON CONFLICT (id) DO NOTHING;
 
 COMMIT;
 
+-- ------------------------------------------------------------
+-- Borrow harden demo seeds (Phase 1/2 validation)
+-- ------------------------------------------------------------
+
+\connect auth_db
+BEGIN;
+
+INSERT INTO permissions (code, module_name, action_name, description)
+VALUES
+    ('borrow.read', 'borrow', 'read', 'View customers, reservations and loans'),
+    ('borrow.write', 'borrow', 'write', 'Create reservations, loans and returns')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM roles r
+JOIN permissions p ON p.code IN ('borrow.read', 'borrow.write')
+WHERE r.code IN ('MANAGER', 'STAFF')
+ON CONFLICT DO NOTHING;
+
+COMMIT;
+
+\connect borrow_db
+BEGIN;
+
+INSERT INTO membership_plans (
+    id, code, name, description, max_active_loans, max_loan_days,
+    max_renewal_count, reservation_hold_hours, fine_per_day,
+    lost_item_fee_multiplier, is_active
+) VALUES
+    ('00000000-0000-0000-0000-000000000713', 'PLAN-LIMIT-ONE', 'Limit One Plan', 'Used for membership limit test case.', 1, 7, 0, 12, 4000, 1.00, TRUE)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO customers (
+    id, customer_code, full_name, email, phone, status, total_fine_balance
+) VALUES
+    ('00000000-0000-0000-0000-000000000703', 'CUS-HARDEN-01', 'Le Borrow Active', 'borrow.active@smartbook.local', '0912000003', 'ACTIVE', 0),
+    ('00000000-0000-0000-0000-000000000704', 'CUS-HARDEN-02', 'Le Borrow Fine', 'borrow.fine@smartbook.local', '0912000004', 'ACTIVE', 25000),
+    ('00000000-0000-0000-0000-000000000705', 'CUS-HARDEN-03', 'Le Borrow Limited', 'borrow.limit@smartbook.local', '0912000005', 'ACTIVE', 0)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO customer_preferences (customer_id)
+VALUES
+    ('00000000-0000-0000-0000-000000000703'),
+    ('00000000-0000-0000-0000-000000000704'),
+    ('00000000-0000-0000-0000-000000000705')
+ON CONFLICT (customer_id) DO NOTHING;
+
+INSERT INTO customer_memberships (
+    id, customer_id, plan_id, card_number, start_date, end_date, status
+) VALUES
+    ('00000000-0000-0000-0000-000000000723', '00000000-0000-0000-0000-000000000703', '00000000-0000-0000-0000-000000000712', 'CARD-HARDEN-01', CURRENT_DATE - INTERVAL '3 day', CURRENT_DATE + INTERVAL '180 day', 'ACTIVE'),
+    ('00000000-0000-0000-0000-000000000724', '00000000-0000-0000-0000-000000000704', '00000000-0000-0000-0000-000000000712', 'CARD-HARDEN-02', CURRENT_DATE - INTERVAL '3 day', CURRENT_DATE + INTERVAL '180 day', 'ACTIVE'),
+    ('00000000-0000-0000-0000-000000000725', '00000000-0000-0000-0000-000000000705', '00000000-0000-0000-0000-000000000713', 'CARD-HARDEN-03', CURRENT_DATE - INTERVAL '3 day', CURRENT_DATE + INTERVAL '180 day', 'ACTIVE')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO loan_transactions (
+    id, loan_number, customer_id, warehouse_id, handled_by_user_id, borrow_date, due_date, status, total_items, notes
+) VALUES
+    ('00000000-0000-0000-0000-000000000742', 'LOAN-HARDEN-01', '00000000-0000-0000-0000-000000000705', '00000000-0000-0000-0000-000000000461', '00000000-0000-0000-0000-000000000103', NOW() - INTERVAL '1 day', NOW() + INTERVAL '6 day', 'BORROWED', 1, 'Seeded active loan for membership limit test')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO loan_items (
+    id, loan_id, variant_id, due_date, status, item_condition_on_checkout
+) VALUES
+    ('00000000-0000-0000-0000-000000000753', '00000000-0000-0000-0000-000000000742', '00000000-0000-0000-0000-000000000441', NOW() + INTERVAL '6 day', 'BORROWED', 'GOOD')
+ON CONFLICT (id) DO NOTHING;
+
+COMMIT;
+
+\connect inventory_db
+BEGIN;
+
+INSERT INTO book_variants (
+    id, book_id, sku, isbn13, internal_barcode, cover_type, language_code,
+    publish_year, condition_grade, unit_cost, list_price, replacement_cost,
+    is_borrowable, is_sellable, is_track_by_unit, is_active
+) VALUES
+    ('00000000-0000-0000-0000-000000000449', '00000000-0000-0000-0000-000000000431', 'SKU-DB-OUT-001', '9786040000099', 'BC-DB-OUT-001', 'PAPERBACK', 'en', 2024, 'GOOD', 70000, 99000, 120000, TRUE, FALSE, FALSE, TRUE)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO stock_balances (
+    id, warehouse_id, variant_id, location_id, on_hand_qty, available_qty, reserved_qty, borrowed_qty,
+    damaged_qty, in_transit_qty, safety_stock_qty, reorder_point, status, version, last_movement_at
+) VALUES
+    ('00000000-0000-0000-0000-000000000487', '00000000-0000-0000-0000-000000000461', '00000000-0000-0000-0000-000000000449', '00000000-0000-0000-0000-000000000472', 0, 0, 0, 0, 0, 0, 0, 1, 'OUT_OF_STOCK', 1, NOW())
+ON CONFLICT (id) DO NOTHING;
+
+COMMIT;
+
 \connect inventory_db
 BEGIN;
 

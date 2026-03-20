@@ -1,0 +1,318 @@
+const { prisma } = require('../lib/prisma');
+const { writeAuditLog } = require('../lib/audit');
+const { resolveActiveMembership } = require('../services/membership.service');
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
+function parsePagination(query) {
+  const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number.parseInt(String(query.pageSize || '20'), 10) || 20));
+  return { page, pageSize, skip: (page - 1) * pageSize, take: pageSize };
+}
+
+function generateCustomerCode() {
+  const year = new Date().getFullYear();
+  const suffix = Math.random().toString(36).slice(2, 7).toUpperCase();
+  return `CUS-${year}-${suffix}`;
+}
+
+function generateCardNumber(customerId) {
+  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+  const idPart = String(customerId || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+  return `CARD-${stamp}-${idPart}`;
+}
+
+function parseId(value) {
+  const id = String(value || '').trim();
+  return id || null;
+}
+
+async function listCustomers(req, res) {
+  const { status, q } = req.query;
+  const pagination = parsePagination(req.query);
+
+  const where = {
+    ...(typeof status === 'string' && status ? { status } : {}),
+    ...(typeof q === 'string' && q.trim()
+      ? {
+          OR: [
+            { full_name: { contains: q.trim(), mode: 'insensitive' } },
+            { customer_code: { contains: q.trim(), mode: 'insensitive' } },
+            { email: { contains: q.trim(), mode: 'insensitive' } },
+            { phone: { contains: q.trim(), mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+
+  try {
+    const [items, total] = await Promise.all([
+      prisma.customers.findMany({
+        where,
+        orderBy: [{ created_at: 'desc' }],
+        skip: pagination.skip,
+        take: pagination.take,
+      }),
+      prisma.customers.count({ where }),
+    ]);
+
+    return res.json({
+      data: items,
+      meta: {
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        total,
+        totalPages: Math.ceil(total / pagination.pageSize) || 1,
+      },
+    });
+  } catch (error) {
+    console.error('Error while listing customers:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+async function createCustomer(req, res) {
+  const { full_name, email, phone, birth_date, address, status } = req.body;
+  const actorUserId = req.user?.id || null;
+  const defaultPlanCode = String(process.env.DEFAULT_MEMBERSHIP_PLAN_CODE || 'STANDARD').trim();
+
+  if (!full_name || String(full_name).trim().length < 2) {
+    return res.status(400).json({ message: 'full_name is required and must be at least 2 chars' });
+  }
+
+  const resolvedStatus = status || 'ACTIVE';
+  if (!['ACTIVE', 'SUSPENDED', 'BLOCKED', 'INACTIVE'].includes(resolvedStatus)) {
+    return res.status(400).json({ message: 'Invalid status' });
+  }
+
+  if (email && !isValidEmail(email)) {
+    return res.status(400).json({ message: 'Invalid email format' });
+  }
+
+  try {
+    const created = await prisma.$transaction(async (tx) => {
+      const customer = await tx.customers.create({
+        data: {
+          customer_code: generateCustomerCode(),
+          full_name: String(full_name).trim(),
+          email: email ? String(email).trim() : null,
+          phone: phone ? String(phone).trim() : null,
+          birth_date: birth_date ? new Date(birth_date) : null,
+          address: address ? String(address).trim() : null,
+          status: resolvedStatus,
+        },
+      });
+
+      await tx.customer_preferences.create({
+        data: {
+          customer_id: customer.id,
+        },
+      });
+
+      const membershipPlan = await tx.membership_plans.findFirst({
+        where: {
+          is_active: true,
+          ...(defaultPlanCode ? { code: defaultPlanCode } : {}),
+        },
+      }) || await tx.membership_plans.findFirst({
+        where: { is_active: true },
+        orderBy: [{ created_at: 'asc' }],
+      });
+
+      if (membershipPlan) {
+        const membership = await tx.customer_memberships.create({
+          data: {
+            customer_id: customer.id,
+            plan_id: membershipPlan.id,
+            card_number: generateCardNumber(customer.id),
+            start_date: new Date(),
+            status: resolvedStatus === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
+            note: 'Auto assigned on customer creation',
+          },
+        });
+
+        await writeAuditLog(tx, {
+          actor_user_id: actorUserId,
+          action_name: 'AUTO_ASSIGN_CUSTOMER_MEMBERSHIP',
+          entity_type: 'CUSTOMER_MEMBERSHIP',
+          entity_id: membership.id,
+          after_data: {
+            customer_id: membership.customer_id,
+            plan_id: membership.plan_id,
+            plan_code: membershipPlan.code,
+            status: membership.status,
+          },
+        });
+      }
+
+      await writeAuditLog(tx, {
+        actor_user_id: actorUserId,
+        action_name: 'CREATE_CUSTOMER',
+        entity_type: 'CUSTOMER',
+        entity_id: customer.id,
+        after_data: customer,
+      });
+
+      return customer;
+    });
+
+    return res.status(201).json({ data: created });
+  } catch (error) {
+    if (error?.code === 'P2002') {
+      return res.status(409).json({ message: 'Email, phone or customer_code already exists' });
+    }
+    console.error('Error while creating customer:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+async function getCustomerById(req, res) {
+  const id = parseId(req.params.id);
+  if (!id || !isUuid(id)) {
+    return res.status(400).json({ message: 'Invalid customer id' });
+  }
+
+  try {
+    const customer = await prisma.customers.findUnique({
+      where: { id },
+      include: {
+        customer_preferences: true,
+        customer_memberships: {
+          include: { membership_plans: true },
+          orderBy: [{ start_date: 'desc' }],
+          take: 5,
+        },
+      },
+    });
+
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+
+    return res.json({ data: customer });
+  } catch (error) {
+    console.error('Error while fetching customer by id:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+async function updateCustomer(req, res) {
+  const id = parseId(req.params.id);
+  const actorUserId = req.user?.id || null;
+
+  if (!id || !isUuid(id)) {
+    return res.status(400).json({ message: 'Invalid customer id' });
+  }
+
+  const { full_name, email, phone, birth_date, address, status } = req.body;
+
+  if (status && !['ACTIVE', 'SUSPENDED', 'BLOCKED', 'INACTIVE'].includes(status)) {
+    return res.status(400).json({ message: 'Invalid status' });
+  }
+
+  if (email !== undefined && email && !isValidEmail(email)) {
+    return res.status(400).json({ message: 'Invalid email format' });
+  }
+
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      const existing = await tx.customers.findUnique({ where: { id } });
+      if (!existing) {
+        return null;
+      }
+
+      const customer = await tx.customers.update({
+        where: { id },
+        data: {
+          ...(full_name !== undefined ? { full_name: String(full_name).trim() } : {}),
+          ...(email !== undefined ? { email: email ? String(email).trim() : null } : {}),
+          ...(phone !== undefined ? { phone: phone ? String(phone).trim() : null } : {}),
+          ...(birth_date !== undefined ? { birth_date: birth_date ? new Date(birth_date) : null } : {}),
+          ...(address !== undefined ? { address: address ? String(address).trim() : null } : {}),
+          ...(status !== undefined ? { status } : {}),
+        },
+      });
+
+      await writeAuditLog(tx, {
+        actor_user_id: actorUserId,
+        action_name: 'UPDATE_CUSTOMER',
+        entity_type: 'CUSTOMER',
+        entity_id: customer.id,
+        before_data: existing,
+        after_data: customer,
+      });
+
+      return customer;
+    });
+
+    if (!updated) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+
+    return res.json({ data: updated });
+  } catch (error) {
+    if (error?.code === 'P2002') {
+      return res.status(409).json({ message: 'Email or phone already exists' });
+    }
+    console.error('Error while updating customer:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+async function getActiveMembership(req, res) {
+  const id = parseId(req.params.id);
+
+  if (!id || !isUuid(id)) {
+    return res.status(400).json({ message: 'Invalid customer id' });
+  }
+
+  try {
+    const customer = await prisma.customers.findUnique({ where: { id } });
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+
+    const membershipInfo = await resolveActiveMembership(prisma, id);
+    if (!membershipInfo) {
+      return res.status(404).json({ message: 'Active membership not found' });
+    }
+
+    const activeLoanCount = await prisma.loan_transactions.count({
+      where: {
+        customer_id: id,
+        status: { in: ['RESERVED', 'BORROWED', 'OVERDUE'] },
+      },
+    });
+
+    return res.json({
+      data: {
+        customer_id: id,
+        membership_id: membershipInfo.membership.id,
+        plan_id: membershipInfo.plan.id,
+        plan_code: membershipInfo.plan.code,
+        plan_name: membershipInfo.plan.name,
+        limits: membershipInfo.limits,
+        active_loan_count: activeLoanCount,
+        remaining_loan_slots: Math.max(0, membershipInfo.limits.max_active_loans - activeLoanCount),
+        outstanding_fine_balance: Number(customer.total_fine_balance),
+      },
+    });
+  } catch (error) {
+    console.error('Error while loading active membership:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+module.exports = {
+  listCustomers,
+  createCustomer,
+  getCustomerById,
+  updateCustomer,
+  getActiveMembership,
+};

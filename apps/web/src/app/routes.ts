@@ -13,6 +13,10 @@ import { WarehousesPage } from "@/components/pages/warehouses";
 import { AIImportPage } from "@/components/pages/ai-import";
 import { RecommendationsPage } from "@/components/pages/recommendations";
 import { BorrowPage } from "@/components/pages/borrow";
+import { BorrowCustomersPage } from "@/components/pages/borrow-customers";
+import { BorrowReservationsPage } from "@/components/pages/borrow-reservations";
+import { BorrowLoansPage } from "@/components/pages/borrow-loans";
+import { BorrowLoanDetailPage } from "@/components/pages/borrow-loan-detail";
 import { UsersPage } from "@/components/pages/users";
 import { RolesPage } from "@/components/pages/roles";
 import { LoginPage } from "@/components/pages/login";
@@ -61,6 +65,10 @@ export const router = createBrowserRouter([
       { path: "ai-import", Component: AIImportPage },
       { path: "recommendations", Component: RecommendationsPage },
       { path: "borrow", Component: BorrowPage },
+      { path: "borrow/customers", Component: BorrowCustomersPage },
+      { path: "borrow/reservations", Component: BorrowReservationsPage },
+      { path: "borrow/loans", Component: BorrowLoansPage },
+      { path: "borrow/loans/:id", Component: BorrowLoanDetailPage },
       { path: "users", Component: UsersPage },
       { path: "roles", Component: RolesPage },
       { path: "*", Component: DashboardPage },

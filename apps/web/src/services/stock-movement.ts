@@ -2,43 +2,34 @@ import { inventoryAPI } from './api.ts';
 
 export interface StockMovement {
   id: string;
-  bookId: string;
-  warehouseId: string;
-  type: 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
+  movement_number: string;
+  created_at: string;
+  movement_type: string;
+  type: 'inbound' | 'outbound' | 'transfer';
   quantity: number;
-  reference: string;
-  notes: string;
-  createdAt: string;
-  createdBy: string;
-}
-
-export interface StockMovementRequest {
-  bookId: string;
-  warehouseId: string;
-  type: 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
-  quantity: number;
-  reference: string;
-  notes?: string;
+  delta: number;
+  unit_cost: number;
+  warehouse_id: string;
+  warehouse_name: string | null;
+  warehouse_code: string | null;
+  from_location_id: string | null;
+  to_location_id: string | null;
+  from_location_code: string | null;
+  to_location_code: string | null;
+  transfer_note: string | null;
+  variant_id: string;
+  sku: string | null;
+  barcode: string | null;
+  book_id: string | null;
+  book_title: string;
+  created_by_user_id: string;
+  reference_type: string | null;
+  reference_id: string | null;
 }
 
 export const stockMovementService = {
-  getAll: async (params?: any) => {
+  getAll: async (params?: Record<string, unknown>) => {
     const response = await inventoryAPI.get('/api/stock-movements', { params });
-    return response.data;
-  },
-
-  getById: async (id: string) => {
-    const response = await inventoryAPI.get(`/api/stock-movements/${id}`);
-    return response.data;
-  },
-
-  create: async (data: StockMovementRequest) => {
-    const response = await inventoryAPI.post('/api/stock-movements', data);
-    return response.data;
-  },
-
-  getByWarehouse: async (warehouseId: string) => {
-    const response = await inventoryAPI.get(`/api/stock-movements/warehouse/${warehouseId}`);
-    return response.data;
+    return (response.data || []) as StockMovement[];
   },
 };

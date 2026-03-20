@@ -7,13 +7,14 @@ const {
 	createIncompleteBook,
 	updateBookDetails,
 } = require('../controllers/book.controller');
+const { authorizeAnyPermission } = require('../middlewares/auth.middleware');
 
 const router = express.Router();
 
-router.get('/', getAllBooks);
-router.get('/barcode/:barcode', findBookByBarcode);
-router.post('/incomplete', createIncompleteBook);
-router.get('/:id', getBookById);
-router.patch('/:id', updateBookDetails);
+router.get('/', authorizeAnyPermission(['inventory.catalog.read', 'inventory.catalog.write']), getAllBooks);
+router.get('/barcode/:barcode', authorizeAnyPermission(['inventory.catalog.read', 'inventory.catalog.write']), findBookByBarcode);
+router.post('/incomplete', authorizeAnyPermission(['inventory.catalog.write']), createIncompleteBook);
+router.get('/:id', authorizeAnyPermission(['inventory.catalog.read', 'inventory.catalog.write']), getBookById);
+router.patch('/:id', authorizeAnyPermission(['inventory.catalog.write']), updateBookDetails);
 
 module.exports = router;

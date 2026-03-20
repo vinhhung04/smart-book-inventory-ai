@@ -10,6 +10,7 @@ const port = Number(process.env.PORT || 3000);
 
 const authTarget = process.env.AUTH_SERVICE_URL || "http://auth-service:3002";
 const inventoryTarget = process.env.INVENTORY_SERVICE_URL || "http://inventory-service:3001";
+const borrowTarget = process.env.BORROW_SERVICE_URL || "http://borrow-service:3005";
 const aiTarget = process.env.AI_SERVICE_URL || "http://ai-service:8000";
 
 app.use(cors());
@@ -20,6 +21,7 @@ app.get("/health", (_req, res) => {
     status: "ok",
     authTarget,
     inventoryTarget,
+    borrowTarget,
     aiTarget,
   });
 });
@@ -46,6 +48,15 @@ app.use(
   createProxyMiddleware({
     pathFilter: "/api",
     target: inventoryTarget,
+    changeOrigin: true,
+    xfwd: true,
+  }),
+);
+
+app.use(
+  createProxyMiddleware({
+    pathFilter: "/borrow",
+    target: borrowTarget,
     changeOrigin: true,
     xfwd: true,
   }),

@@ -194,6 +194,35 @@ async function createGoodsReceipt(req, res) {
     const baseTimestamp = Date.now();
 
     const result = await prisma.$transaction(async (tx) => {
+      const warehouse = await tx.warehouses.findUnique({ where: { id: warehouse_id } });
+      if (!warehouse) {
+        throw new Error('WAREHOUSE_NOT_FOUND');
+      }
+
+      const variantIds = [...new Set(items.map((item) => item.variant_id))];
+      const locationIds = [...new Set(items.map((item) => item.location_id))];
+
+      const variants = await tx.book_variants.findMany({
+        where: { id: { in: variantIds } },
+        select: { id: true },
+      });
+
+      if (variants.length !== variantIds.length) {
+        throw new Error('INVALID_VARIANTS');
+      }
+
+      const locations = await tx.locations.findMany({
+        where: {
+          id: { in: locationIds },
+          warehouse_id,
+        },
+        select: { id: true },
+      });
+
+      if (locations.length !== locationIds.length) {
+        throw new Error('INVALID_LOCATIONS');
+      }
+
       const goodsReceipt = await tx.goods_receipts.create({
         data: {
           receipt_number: createReceiptNumber(baseTimestamp),
@@ -242,6 +271,15 @@ async function createGoodsReceipt(req, res) {
       data: result,
     });
   } catch (error) {
+    if (error.message === 'WAREHOUSE_NOT_FOUND') {
+      return res.status(404).json({ message: 'Warehouse not found' });
+    }
+    if (error.message === 'INVALID_VARIANTS') {
+      return res.status(400).json({ message: 'One or more variant_id values are invalid' });
+    }
+    if (error.message === 'INVALID_LOCATIONS') {
+      return res.status(400).json({ message: 'One or more location_id values are invalid for this warehouse' });
+    }
     console.error('Error while creating goods receipt:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
@@ -257,6 +295,21 @@ async function postDraftGoodsReceipt(tx, goodsReceipt, userId) {
       unit_cost: true,
     },
   });
+
+  const locationIds = [...new Set(items.map((item) => item.location_id).filter(Boolean))];
+  if (locationIds.length) {
+    const validLocations = await tx.locations.findMany({
+      where: {
+        id: { in: locationIds },
+        warehouse_id: goodsReceipt.warehouse_id,
+      },
+      select: { id: true },
+    });
+
+    if (validLocations.length !== locationIds.length) {
+      throw new Error('INVALID_LOCATIONS_FOR_RECEIPT');
+    }
+  }
 
   const baseTimestamp = Date.now();
 
@@ -369,6 +422,9 @@ async function updateGoodsReceipt(req, res) {
     });
   } catch (error) {
     console.error('Error while updating goods receipt:', error);
+    if (error.message === 'INVALID_LOCATIONS_FOR_RECEIPT') {
+      return res.status(400).json({ message: 'Receipt contains locations outside the selected warehouse' });
+    }
     return res.status(500).json({ message: 'Internal server error' });
   }
 }

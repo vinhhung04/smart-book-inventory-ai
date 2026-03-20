@@ -7,4 +7,5 @@ export * from './goods-receipt';
 export * from './ai';
 export * from './user';
 export * from './role';
+export * from './borrow';
 export { authAPI, inventoryAPI, aiAPI } from './api.ts';

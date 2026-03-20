@@ -3,9 +3,9 @@
     image: postgres:15-alpine
     container_name: smartbook_postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-inventory}
     ports:
       - "5432:5432"
     volumes:
@@ -31,8 +31,8 @@
       - "3003:3001"
     environment:
       - PORT=3001
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${INVENTORY_DB_NAME}?schema=public
-      - JWT_SECRET=${JWT_SECRET}
+      - DATABASE_URL=postgresql://${DB_USER:-user}:${DB_PASSWORD:-password}@${DB_HOST:-db}:${DB_PORT:-5432}/${INVENTORY_DB_NAME:-inventory_db}?schema=public
+      - JWT_SECRET=${JWT_SECRET:-smartbook_shared_jwt_secret}
     depends_on:
       - db
 
@@ -44,8 +44,22 @@
       - "3004:3002"
     environment:
       - PORT=3002
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${AUTH_DB_NAME}?schema=public
-      - JWT_SECRET=${JWT_SECRET}
+      - DATABASE_URL=postgresql://${DB_USER:-user}:${DB_PASSWORD:-password}@${DB_HOST:-db}:${DB_PORT:-5432}/${AUTH_DB_NAME:-auth_db}?schema=public
+      - JWT_SECRET=${JWT_SECRET:-smartbook_shared_jwt_secret}
+    depends_on:
+      - db
+
+  borrow-service:
+    build: ./services/borrow-service
+    container_name: borrow-service
+    command: sh -c "npm run start"
+    ports:
+      - "3005:3005"
+    environment:
+      - PORT=3005
+      - DATABASE_URL=postgresql://${DB_USER:-user}:${DB_PASSWORD:-password}@${DB_HOST:-db}:${DB_PORT:-5432}/${BORROW_DB_NAME:-borrow_db}?schema=public
+      - INVENTORY_SERVICE_URL=http://inventory-service:3001
+      - JWT_SECRET=${JWT_SECRET:-smartbook_shared_jwt_secret}
     depends_on:
       - db
 
@@ -54,7 +68,7 @@
     build: ./services/inventory-service
     command: sh -c "npx prisma db push --skip-generate --accept-data-loss"
     environment:
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${INVENTORY_DB_NAME}?schema=public
+      - DATABASE_URL=postgresql://${DB_USER:-user}:${DB_PASSWORD:-password}@${DB_HOST:-db}:${DB_PORT:-5432}/${INVENTORY_DB_NAME:-inventory_db}?schema=public
     depends_on:
       - db
 
@@ -63,7 +77,16 @@
     build: ./services/auth-service
     command: sh -c "npx prisma db push --skip-generate"
     environment:
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${AUTH_DB_NAME}?schema=public
+      - DATABASE_URL=postgresql://${DB_USER:-user}:${DB_PASSWORD:-password}@${DB_HOST:-db}:${DB_PORT:-5432}/${AUTH_DB_NAME:-auth_db}?schema=public
+    depends_on:
+      - db
+
+  borrow-db-push:
+    profiles: ["dev"]
+    build: ./services/borrow-service
+    command: sh -c "npx prisma db push --skip-generate"
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-user}:${DB_PASSWORD:-password}@${DB_HOST:-db}:${DB_PORT:-5432}/${BORROW_DB_NAME:-borrow_db}?schema=public
     depends_on:
       - db
 
@@ -87,10 +110,12 @@
       - PORT=3000
       - AUTH_SERVICE_URL=http://auth-service:3002
       - INVENTORY_SERVICE_URL=http://inventory-service:3001
+      - BORROW_SERVICE_URL=http://borrow-service:3005
       - AI_SERVICE_URL=http://ai-service:8000
     depends_on:
       - auth-service
       - inventory-service
+      - borrow-service
       - ai-service
 
   smartbook-ui:
@@ -106,6 +131,7 @@
       - api-gateway
       - inventory-service
       - auth-service
+      - borrow-service
 
   ollama:
     image: ollama/ollama

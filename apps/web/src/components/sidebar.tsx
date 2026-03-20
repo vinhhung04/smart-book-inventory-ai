@@ -2,7 +2,8 @@ import { NavLink } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
   LayoutDashboard, BookOpen, Package, FileText, Warehouse, ArrowRightLeft,
-  Sparkles, ThumbsUp, BookMarked, Users, Shield, ScanBarcode, ChevronLeft
+  Sparkles, ThumbsUp, BookMarked, Users, Shield, ScanBarcode, ChevronLeft,
+  UserRound, CalendarClock, HandCoins
 } from "lucide-react";
 import { authService } from "@/services/auth";
 
@@ -32,6 +33,9 @@ const navGroups = [
     color: "text-amber-400",
     items: [
       { to: "/borrow", icon: BookMarked, label: "Borrow", activeColor: "from-amber-500/15 to-orange-500/8", textColor: "text-amber-600", iconBg: "bg-amber-500/10" },
+      { to: "/borrow/customers", icon: UserRound, label: "Borrow Customers", activeColor: "from-amber-500/15 to-yellow-500/8", textColor: "text-amber-600", iconBg: "bg-amber-500/10" },
+      { to: "/borrow/reservations", icon: CalendarClock, label: "Reservations", activeColor: "from-orange-500/15 to-amber-500/8", textColor: "text-orange-600", iconBg: "bg-orange-500/10" },
+      { to: "/borrow/loans", icon: HandCoins, label: "Loans", activeColor: "from-emerald-500/15 to-teal-500/8", textColor: "text-emerald-600", iconBg: "bg-emerald-500/10" },
     ],
   },
   {
