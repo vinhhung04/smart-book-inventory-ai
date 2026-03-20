@@ -858,6 +858,30 @@ docker compose down
 docker compose restart <service>
 
 # Logs
+
+---
+
+## Customer Portal Phase 1 Quick Check
+
+Sau khi stack da chay, kiem tra nhanh customer portal Phase 1:
+
+1. Dang ky customer tai `http://localhost:5173/customer/register`.
+2. Dang nhap customer tai `http://localhost:5173/customer/login`.
+3. Xac nhan dashboard customer (`/customer`) hien membership data tu DB that.
+4. Cap nhat profile tai `/customer/profile` va kiem tra du lieu duoc luu that.
+5. Kiem tra contract API qua gateway:
+   - `POST /auth/register`
+   - `POST /auth/login`
+   - `POST /auth/logout`
+   - `GET /auth/me`
+   - `PATCH /auth/me`
+   - `GET /my/profile`
+   - `PATCH /my/profile`
+   - `GET /my/membership`
+
+Chi tiet testcase xem tai `docs/CUSTOMER_PORTAL_PHASE1_TEST_GUIDE.md`.
+
+Cho Phase 3-4 (reservations, loans, fines, notifications), xem them: `docs/CUSTOMER_PORTAL_PHASE34_TEST_GUIDE.md`.
 docker compose logs -f --tail 200
 docker compose logs -f --tail 200 <service>
 

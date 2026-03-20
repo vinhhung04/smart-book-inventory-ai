@@ -5,10 +5,17 @@ const {
   getCustomerById,
   updateCustomer,
   getActiveMembership,
+  getMyProfile,
+  updateMyProfile,
+  getMyMembership,
 } = require('../controllers/customer.controller');
 const { authorizeAnyPermission } = require('../middlewares/auth.middleware');
 
 const router = express.Router();
+
+router.get('/me/profile', getMyProfile);
+router.patch('/me/profile', updateMyProfile);
+router.get('/me/membership', getMyMembership);
 
 router.get('/', authorizeAnyPermission(['borrow.read', 'borrow.write']), listCustomers);
 router.post('/', authorizeAnyPermission(['borrow.write']), createCustomer);

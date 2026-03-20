@@ -12,7 +12,7 @@ const statuses: LoanStatus[] = ['RESERVED', 'BORROWED', 'RETURNED', 'OVERDUE', '
 function getVariant(status: LoanStatus) {
   if (status === 'BORROWED') return 'info';
   if (status === 'RETURNED') return 'success';
-  if (status === 'OVERDUE' || status === 'LOST') return 'warning';
+  if (status === 'OVERDUE' || status === 'LOST' || status === 'DAMAGED') return 'warning';
   if (status === 'CANCELLED') return 'neutral';
   return 'primary';
 }
@@ -61,6 +61,42 @@ export function BorrowLoansPage() {
       await loadLoans();
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Failed to return loan'));
+    }
+  };
+
+  const reportDamage = async (loanId: string) => {
+    if (!window.confirm('Mark returned items as DAMAGED and generate fine now?')) return;
+
+    try {
+      await borrowService.returnLoan(loanId, { item_condition_on_return: 'DAMAGED' });
+      toast.success('Damage return processed');
+      await loadLoans();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Failed to report damage'));
+    }
+  };
+
+  const markLost = async (loanId: string) => {
+    if (!window.confirm('Mark one active item as LOST and generate fine now?')) return;
+
+    try {
+      const detail = await borrowService.getLoanById(loanId);
+      const activeItem = (detail.data.loan_items || []).find((item) => item.status === 'BORROWED' || item.status === 'OVERDUE');
+
+      if (!activeItem) {
+        toast.error('No active loan item found to mark lost');
+        return;
+      }
+
+      await borrowService.returnLoan(loanId, {
+        loan_item_id: activeItem.id,
+        mark_lost: true,
+      });
+
+      toast.success('Lost item processed');
+      await loadLoans();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Failed to mark lost item'));
     }
   };
 
@@ -146,13 +182,29 @@ export function BorrowLoansPage() {
                     </td>
                     <td className="px-5 py-3.5">
                       {loan.status === 'BORROWED' || loan.status === 'OVERDUE' || loan.status === 'RESERVED' ? (
-                        <button
-                          onClick={() => void returnLoan(loan.id)}
-                          className="px-2.5 py-1 rounded-[6px] border border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] hover:bg-emerald-100 transition-all"
-                          style={{ fontWeight: 550 }}
-                        >
-                          Return
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => void returnLoan(loan.id)}
+                            className="px-2.5 py-1 rounded-[6px] border border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] hover:bg-emerald-100 transition-all"
+                            style={{ fontWeight: 550 }}
+                          >
+                            Return
+                          </button>
+                          <button
+                            onClick={() => void reportDamage(loan.id)}
+                            className="px-2.5 py-1 rounded-[6px] border border-amber-200 bg-amber-50 text-amber-700 text-[11px] hover:bg-amber-100 transition-all"
+                            style={{ fontWeight: 550 }}
+                          >
+                            Report Damage
+                          </button>
+                          <button
+                            onClick={() => void markLost(loan.id)}
+                            className="px-2.5 py-1 rounded-[6px] border border-rose-200 bg-rose-50 text-rose-700 text-[11px] hover:bg-rose-100 transition-all"
+                            style={{ fontWeight: 550 }}
+                          >
+                            Mark Lost
+                          </button>
+                        </div>
                       ) : (
                         <span className="text-[11px] text-slate-400">-</span>
                       )}

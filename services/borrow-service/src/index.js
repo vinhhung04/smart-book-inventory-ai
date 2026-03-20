@@ -3,8 +3,11 @@ const express = require('express');
 const cors = require('cors');
 const { authenticateToken } = require('./middlewares/auth.middleware');
 const customerRoutes = require('./routes/customer.routes');
+const customerInternalRoutes = require('./routes/customer-internal.routes');
+const myRoutes = require('./routes/my.routes');
 const reservationRoutes = require('./routes/reservation.routes');
 const loanRoutes = require('./routes/loan.routes');
+const { startOverdueSweepJob } = require('./jobs/overdue.job');
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -42,9 +45,12 @@ app.get('/health', (_req, res) => {
   });
 });
 
+app.use('/internal/customers', customerInternalRoutes);
+
 app.use('/borrow', authenticateToken);
 
 app.use('/borrow/customers', customerRoutes);
+app.use('/borrow/my', myRoutes);
 app.use('/borrow/reservations', reservationRoutes);
 app.use('/borrow/loans', loanRoutes);
 
@@ -75,4 +81,5 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Borrow Service running on http://localhost:${PORT}`);
+  startOverdueSweepJob();
 });

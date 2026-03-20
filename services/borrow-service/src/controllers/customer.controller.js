@@ -33,6 +33,106 @@ function parseId(value) {
   return id || null;
 }
 
+async function resolveCurrentCustomer(req) {
+  const userId = String(req.user?.id || '').trim();
+  const email = String(req.user?.email || '').trim().toLowerCase();
+
+  if (!email) {
+    return null;
+  }
+
+  const customer = await prisma.customers.findFirst({
+    where: {
+      email,
+    },
+  });
+
+  if (!customer && userId) {
+    return prisma.customers.findFirst({
+      where: {
+        customer_code: `AUTH-${userId.slice(0, 12).toUpperCase()}`,
+      },
+    });
+  }
+
+  return customer;
+}
+
+async function ensureCurrentCustomer(req) {
+  const existed = await resolveCurrentCustomer(req);
+  if (existed) {
+    return existed;
+  }
+
+  const email = String(req.user?.email || '').trim().toLowerCase();
+  const fullName = String(req.user?.full_name || req.user?.username || '').trim();
+  const userId = String(req.user?.id || '').trim();
+
+  if (!email || !fullName) {
+    return null;
+  }
+
+  try {
+    const created = await prisma.$transaction(async (tx) => {
+      const customer = await tx.customers.create({
+        data: {
+          customer_code: userId ? `AUTH-${userId.slice(0, 12).toUpperCase()}` : generateCustomerCode(),
+          full_name: fullName,
+          email,
+          status: 'ACTIVE',
+        },
+      });
+
+      await tx.customer_preferences.create({
+        data: { customer_id: customer.id },
+      });
+
+      const membershipPlan = await tx.membership_plans.findFirst({
+        where: {
+          is_active: true,
+          code: String(process.env.DEFAULT_MEMBERSHIP_PLAN_CODE || 'STANDARD').trim(),
+        },
+      }) || await tx.membership_plans.findFirst({
+        where: { is_active: true },
+        orderBy: [{ created_at: 'asc' }],
+      }) || await tx.membership_plans.create({
+        data: {
+          code: String(process.env.DEFAULT_MEMBERSHIP_PLAN_CODE || 'STANDARD').trim(),
+          name: 'Standard Plan',
+          description: 'Auto-created default plan for customer self provisioning',
+          max_active_loans: 5,
+          max_loan_days: 14,
+          max_renewal_count: 2,
+          reservation_hold_hours: 24,
+          fine_per_day: 5000,
+          lost_item_fee_multiplier: 1,
+          is_active: true,
+        },
+      });
+
+      await tx.customer_memberships.create({
+        data: {
+          customer_id: customer.id,
+          plan_id: membershipPlan.id,
+          card_number: generateCardNumber(customer.id),
+          start_date: new Date(),
+          status: 'ACTIVE',
+          note: 'Auto assigned from customer self provisioning',
+        },
+      });
+
+      return customer;
+    });
+
+    return created;
+  } catch (error) {
+    if (error?.code === 'P2002') {
+      return prisma.customers.findFirst({ where: { email } });
+    }
+    throw error;
+  }
+}
+
 async function listCustomers(req, res) {
   const { status, q } = req.query;
   const pagination = parsePagination(req.query);
@@ -309,10 +409,196 @@ async function getActiveMembership(req, res) {
   }
 }
 
+async function getMyProfile(req, res) {
+  try {
+    const customer = await ensureCurrentCustomer(req);
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer profile not found' });
+    }
+
+    const withPrefs = await prisma.customers.findUnique({
+      where: { id: customer.id },
+      include: {
+        customer_preferences: true,
+      },
+    });
+
+    return res.json({ data: withPrefs });
+  } catch (error) {
+    console.error('Error while loading own profile:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+async function updateMyProfile(req, res) {
+  try {
+    const customer = await ensureCurrentCustomer(req);
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer profile not found' });
+    }
+
+    const { full_name, phone, birth_date, address } = req.body || {};
+
+    const updated = await prisma.customers.update({
+      where: { id: customer.id },
+      data: {
+        ...(full_name !== undefined ? { full_name: String(full_name).trim() } : {}),
+        ...(phone !== undefined ? { phone: phone ? String(phone).trim() : null } : {}),
+        ...(birth_date !== undefined ? { birth_date: birth_date ? new Date(birth_date) : null } : {}),
+        ...(address !== undefined ? { address: address ? String(address).trim() : null } : {}),
+      },
+      include: {
+        customer_preferences: true,
+      },
+    });
+
+    return res.json({
+      message: 'Profile updated',
+      data: updated,
+    });
+  } catch (error) {
+    if (error?.code === 'P2002') {
+      return res.status(409).json({ message: 'Phone already exists' });
+    }
+    console.error('Error while updating own profile:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+async function getMyMembership(req, res) {
+  try {
+    const customer = await ensureCurrentCustomer(req);
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer profile not found' });
+    }
+
+    const membershipInfo = await resolveActiveMembership(prisma, customer.id);
+    if (!membershipInfo) {
+      return res.status(404).json({ message: 'Active membership not found' });
+    }
+
+    const activeLoanCount = await prisma.loan_transactions.count({
+      where: {
+        customer_id: customer.id,
+        status: { in: ['RESERVED', 'BORROWED', 'OVERDUE'] },
+      },
+    });
+
+    return res.json({
+      data: {
+        customer_id: customer.id,
+        membership_id: membershipInfo.membership.id,
+        plan_id: membershipInfo.plan.id,
+        plan_code: membershipInfo.plan.code,
+        plan_name: membershipInfo.plan.name,
+        limits: membershipInfo.limits,
+        active_loan_count: activeLoanCount,
+        remaining_loan_slots: Math.max(0, membershipInfo.limits.max_active_loans - activeLoanCount),
+        outstanding_fine_balance: Number(customer.total_fine_balance),
+      },
+    });
+  } catch (error) {
+    console.error('Error while loading own membership:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+async function provisionCustomerFromAuth(req, res) {
+  const internalServiceKey = String(process.env.INTERNAL_SERVICE_KEY || 'smartbook-internal-dev-key').trim();
+
+  const providedKey = String(req.headers['x-internal-service-key'] || '').trim();
+  if (providedKey !== internalServiceKey) {
+    return res.status(401).json({ message: 'Unauthorized internal call' });
+  }
+
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const full_name = String(req.body?.full_name || '').trim();
+  const userId = String(req.body?.user_id || '').trim();
+
+  if (!email || !full_name) {
+    return res.status(400).json({ message: 'email and full_name are required' });
+  }
+
+  try {
+    const existing = await prisma.customers.findFirst({ where: { email } });
+    if (existing) {
+      return res.json({ data: existing, created: false });
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const customer = await tx.customers.create({
+        data: {
+          customer_code: userId ? `AUTH-${userId.slice(0, 12).toUpperCase()}` : generateCustomerCode(),
+          full_name,
+          email,
+          status: 'ACTIVE',
+        },
+      });
+
+      await tx.customer_preferences.create({
+        data: {
+          customer_id: customer.id,
+        },
+      });
+
+      const membershipPlan = await tx.membership_plans.findFirst({
+        where: {
+          is_active: true,
+          code: String(process.env.DEFAULT_MEMBERSHIP_PLAN_CODE || 'STANDARD').trim(),
+        },
+      }) || await tx.membership_plans.findFirst({
+        where: { is_active: true },
+        orderBy: [{ created_at: 'asc' }],
+      });
+
+      const ensuredPlan = membershipPlan || await tx.membership_plans.create({
+        data: {
+          code: String(process.env.DEFAULT_MEMBERSHIP_PLAN_CODE || 'STANDARD').trim(),
+          name: 'Standard Plan',
+          description: 'Auto-created default plan for customer provisioning',
+          max_active_loans: 5,
+          max_loan_days: 14,
+          max_renewal_count: 2,
+          reservation_hold_hours: 24,
+          fine_per_day: 5000,
+          lost_item_fee_multiplier: 1,
+          is_active: true,
+        },
+      });
+
+      await tx.customer_memberships.create({
+        data: {
+          customer_id: customer.id,
+          plan_id: ensuredPlan.id,
+          card_number: generateCardNumber(customer.id),
+          start_date: new Date(),
+          status: 'ACTIVE',
+          note: 'Auto assigned from auth register',
+        },
+      });
+
+      return customer;
+    });
+
+    return res.status(201).json({ data: created, created: true });
+  } catch (error) {
+    if (error?.code === 'P2002') {
+      return res.status(409).json({ message: 'Customer profile already exists' });
+    }
+    console.error('Error while provisioning customer:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
 module.exports = {
   listCustomers,
   createCustomer,
   getCustomerById,
   updateCustomer,
   getActiveMembership,
+  getMyProfile,
+  updateMyProfile,
+  getMyMembership,
+  provisionCustomerFromAuth,
+  ensureCurrentCustomer,
 };

@@ -4,6 +4,8 @@ const { writeAuditLog } = require('../lib/audit');
 const { createNotificationRecord } = require('../lib/notifications');
 const { resolveActiveMembership } = require('../services/membership.service');
 const { consumeReservation, returnBorrowedStock } = require('../services/inventory-integration.service');
+const { AccountError, debitBorrowFee, getCustomerAccountSnapshot } = require('../services/account.service');
+const { applyReturnFines, runOverdueSweep } = require('../services/fine.service');
 
 const ACTIVE_RESERVATION_STATUSES = ['PENDING', 'CONFIRMED', 'READY_FOR_PICKUP'];
 const ACTIVE_LOAN_STATUSES = ['BORROWED', 'OVERDUE', 'RESERVED'];
@@ -33,6 +35,14 @@ function createLoanNumber() {
   const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
   const epoch = Date.now().toString().slice(-6);
   return `LOAN-${epoch}-${suffix}`;
+}
+
+function getBorrowFeePerItem() {
+  const configured = Number(process.env.BORROW_FEE_PER_ITEM || 0);
+  if (!Number.isFinite(configured) || configured < 0) {
+    return 0;
+  }
+  return Number(configured.toFixed(2));
 }
 
 async function listLoans(req, res) {
@@ -188,6 +198,32 @@ async function convertReservationToLoan(req, res) {
 
     const loanId = crypto.randomUUID();
     const loanNumber = createLoanNumber();
+    const borrowFeeAmount = Number((reservation.quantity * getBorrowFeePerItem()).toFixed(2));
+
+    if (borrowFeeAmount > 0) {
+      const accountSnapshot = await prisma.$transaction((tx) => getCustomerAccountSnapshot(tx, reservation.customer_id));
+      const projectedBalance = Number((accountSnapshot.availableBalance - borrowFeeAmount).toFixed(2));
+
+      if (accountSnapshot.settings.auto_debit_borrow_fee !== true) {
+        return res.status(409).json({
+          message: 'Auto debit for borrow fee is disabled',
+          detail: {
+            borrow_fee_amount: borrowFeeAmount,
+          },
+        });
+      }
+
+      if (projectedBalance < accountSnapshot.minWalletBalanceRequired) {
+        return res.status(409).json({
+          message: 'Insufficient wallet balance for auto debit',
+          detail: {
+            available_balance: accountSnapshot.availableBalance,
+            required_amount: borrowFeeAmount,
+            min_wallet_balance_required: accountSnapshot.minWalletBalanceRequired,
+          },
+        });
+      }
+    }
 
     await consumeReservation({
       reservation_id: reservationId,
@@ -204,6 +240,25 @@ async function convertReservationToLoan(req, res) {
 
     try {
       const created = await prisma.$transaction(async (tx) => {
+        let debitResult = null;
+        if (borrowFeeAmount > 0) {
+          debitResult = await debitBorrowFee(tx, {
+            customerId: reservation.customer_id,
+            actorUserId,
+            amount: borrowFeeAmount,
+            idempotencyKey: `loan-convert:${idempotencyKey}`,
+            referenceType: 'LOAN_TRANSACTION',
+            referenceId: loanId,
+            note: `Auto debit borrow fee for reservation ${reservation.reservation_number}`,
+            metadata: {
+              reservation_id: reservation.id,
+              reservation_number: reservation.reservation_number,
+              loan_id: loanId,
+              loan_number: loanNumber,
+            },
+          });
+        }
+
         const loan = await tx.loan_transactions.create({
           data: {
             id: loanId,
@@ -247,6 +302,8 @@ async function convertReservationToLoan(req, res) {
             ...loan,
             source_reservation_id: reservation.id,
             idempotency_key: idempotencyKey,
+            borrow_fee_amount: borrowFeeAmount,
+            borrow_fee_ledger_entry_id: debitResult?.entry?.id || null,
           },
         });
 
@@ -255,16 +312,41 @@ async function convertReservationToLoan(req, res) {
           channel: 'IN_APP',
           template_code: 'LOAN_CREATED',
           subject: 'Loan created',
-          body: `Reservation ${reservation.reservation_number} is converted to loan ${loan.loan_number}.`,
+          body: borrowFeeAmount > 0
+            ? `Reservation ${reservation.reservation_number} is converted to loan ${loan.loan_number}. Borrow fee ${borrowFeeAmount.toFixed(2)} VND was auto-debited.`
+            : `Reservation ${reservation.reservation_number} is converted to loan ${loan.loan_number}.`,
           reference_type: 'LOAN_TRANSACTION',
           reference_id: loan.id,
+          metadata: {
+            borrow_fee_amount: borrowFeeAmount,
+            borrow_fee_ledger_entry_id: debitResult?.entry?.id || null,
+          },
         });
 
-        return loan;
+        return {
+          ...loan,
+          borrow_fee_amount: borrowFeeAmount,
+          borrow_fee_ledger_entry_id: debitResult?.entry?.id || null,
+          borrow_fee_remaining_wallet_balance: debitResult?.remainingBalance ?? null,
+        };
       });
 
       return res.status(201).json({ data: created });
     } catch (error) {
+      if (error instanceof AccountError) {
+        if (error.code === 'INSUFFICIENT_FUNDS') {
+          return res.status(409).json({
+            message: 'Insufficient wallet balance for auto debit',
+            detail: error.detail,
+          });
+        }
+
+        return res.status(409).json({
+          message: error.message,
+          detail: error.detail || undefined,
+        });
+      }
+
       console.error('Borrow DB transaction failed after inventory consume:', error);
       return res.status(502).json({
         message: 'Loan creation failed after inventory consume. Manual reconciliation required.',
@@ -285,7 +367,14 @@ async function returnLoan(req, res) {
   const actorUserId = req.user?.id || null;
   const authHeader = req.headers.authorization;
   const idempotencyKey = parseIdempotencyKey(req);
-  const { loan_item_id, returned_to_location_id, item_condition_on_return, notes } = req.body || {};
+  const {
+    loan_item_id,
+    returned_to_location_id,
+    item_condition_on_return,
+    notes,
+    mark_lost,
+  } = req.body || {};
+  const markLost = mark_lost === true;
 
   if (!loanId || !isUuid(loanId)) {
     return res.status(400).json({ message: 'Invalid loan id' });
@@ -301,6 +390,10 @@ async function returnLoan(req, res) {
 
   if (returned_to_location_id && !isUuid(returned_to_location_id)) {
     return res.status(400).json({ message: 'returned_to_location_id must be a valid UUID when provided' });
+  }
+
+  if (markLost && !loan_item_id) {
+    return res.status(400).json({ message: 'mark_lost requires loan_item_id for single-item processing' });
   }
 
   try {
@@ -325,46 +418,66 @@ async function returnLoan(req, res) {
       return res.status(409).json({ message: 'No active loan items to return' });
     }
 
-    for (let index = 0; index < targets.length; index += 1) {
-      const item = targets[index];
-      await returnBorrowedStock({
-        loan_id: loan.id,
-        loan_item_id: item.id,
-        variant_id: item.variant_id,
-        warehouse_id: loan.warehouse_id,
-        quantity: 1,
-        location_id: returned_to_location_id || null,
-        inventory_unit_id: item.inventory_unit_id || null,
-        idempotency_key: `${idempotencyKey}:${index + 1}`,
-        handled_by_user_id: actorUserId,
-        authHeader,
-      });
+    // If this is a damage return (items reported as DAMAGED/POOR), skip returning stock
+    const isDamageReturn = (item_condition_on_return || '').toUpperCase() === 'DAMAGED' || (item_condition_on_return || '').toUpperCase() === 'POOR';
+
+    if (!markLost && !isDamageReturn) {
+      for (let index = 0; index < targets.length; index += 1) {
+        const item = targets[index];
+        await returnBorrowedStock({
+          loan_id: loan.id,
+          loan_item_id: item.id,
+          variant_id: item.variant_id,
+          warehouse_id: loan.warehouse_id,
+          quantity: 1,
+          location_id: returned_to_location_id || null,
+          inventory_unit_id: item.inventory_unit_id || null,
+          idempotency_key: `${idempotencyKey}:${index + 1}`,
+          handled_by_user_id: actorUserId,
+          authHeader,
+        });
+      }
     }
 
     const returnedAt = new Date();
 
     const updated = await prisma.$transaction(async (tx) => {
+      const membershipInfo = await resolveActiveMembership(tx, loan.customer_id);
       const targetIds = targets.map((item) => item.id);
+      const targetStatus = markLost ? 'LOST' : 'RETURNED';
       await tx.loan_items.updateMany({
         where: { id: { in: targetIds } },
         data: {
-          status: 'RETURNED',
-          return_date: returnedAt,
-          returned_to_warehouse_id: loan.warehouse_id,
-          returned_to_location_id: returned_to_location_id || null,
+          status: targetStatus,
+          return_date: markLost ? null : returnedAt,
+          returned_to_warehouse_id: markLost ? null : loan.warehouse_id,
+          returned_to_location_id: markLost ? null : (returned_to_location_id || null),
           item_condition_on_return: item_condition_on_return || 'GOOD',
           ...(notes ? { notes: String(notes) } : {}),
         },
       });
 
+      const fineResult = await applyReturnFines(tx, {
+        customerId: loan.customer_id,
+        loan,
+        items: targets,
+        returnedAt,
+        actorUserId,
+        membershipLimits: membershipInfo?.limits,
+        markLost,
+        itemConditionOnReturn: item_condition_on_return || 'GOOD',
+      });
+
       const remaining = await tx.loan_items.count({
         where: {
           loan_id: loan.id,
-          status: { in: ['BORROWED', 'OVERDUE', 'LOST', 'DAMAGED', 'RESERVED'] },
+          status: { in: ['BORROWED', 'OVERDUE', 'RESERVED'] },
         },
       });
 
-      const loanStatus = remaining === 0 ? 'RETURNED' : loan.status;
+      const loanStatus = markLost
+        ? (remaining === 0 ? 'LOST' : loan.status)
+        : (remaining === 0 ? 'RETURNED' : loan.status);
       const loanUpdated = await tx.loan_transactions.update({
         where: { id: loan.id },
         data: {
@@ -384,7 +497,10 @@ async function returnLoan(req, res) {
         },
         after_data: {
           status: loanStatus,
+          target_status: targetStatus,
           returned_item_count: targets.length,
+          generated_fine_count: fineResult.fines.length,
+          total_fine_balance: fineResult.totalFineBalance,
           idempotency_key: idempotencyKey,
         },
       });
@@ -399,9 +515,18 @@ async function returnLoan(req, res) {
           : `${targets.length} item(s) from loan ${loan.loan_number} have been returned.`,
         reference_type: 'LOAN_TRANSACTION',
         reference_id: loan.id,
+        metadata: {
+          generated_fine_count: fineResult.fines.length,
+          total_fine_balance: fineResult.totalFineBalance,
+          mark_lost: markLost,
+        },
       });
 
-      return loanUpdated;
+      return {
+        ...loanUpdated,
+        generated_fines: fineResult.fines,
+        total_fine_balance: fineResult.totalFineBalance,
+      };
     });
 
     return res.json({ data: updated });
@@ -414,9 +539,25 @@ async function returnLoan(req, res) {
   }
 }
 
+async function runOverdueSweepNow(req, res) {
+  try {
+    const result = await runOverdueSweep(prisma, {
+      limit: Number(req.body?.limit || req.query?.limit || 200),
+    });
+    return res.json({
+      message: 'Overdue sweep completed',
+      data: result,
+    });
+  } catch (error) {
+    console.error('runOverdueSweepNow error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
 module.exports = {
   listLoans,
   getLoanById,
   convertReservationToLoan,
   returnLoan,
+  runOverdueSweepNow,
 };

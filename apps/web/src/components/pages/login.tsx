@@ -20,9 +20,13 @@ export function LoginPage() {
 
     try {
       setIsSubmitting(true);
-      await authService.login(credentials);
+      const loginData = await authService.login(credentials);
       toast.success("Login successful");
-      navigate("/");
+      if (Array.isArray(loginData.user?.roles) && loginData.user.roles.includes('CUSTOMER')) {
+        navigate('/customer');
+      } else {
+        navigate('/');
+      }
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Login failed"));
     } finally {

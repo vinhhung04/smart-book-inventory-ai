@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { CheckCircle2, X } from 'lucide-react';
+import { borrowService } from '../services/borrow';
 
 const TABS = [
   { key: 'borrowing', label: 'Đang mượn' },
@@ -329,13 +330,49 @@ export default function BorrowManagementPage() {
                             Đã hoàn tất
                           </span>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedRecord(record)}
-                            className="text-xs text-indigo-600 hover:underline font-medium"
-                          >
-                            Ghi nhận trả sách
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedRecord(record)}
+                              className="text-xs text-indigo-600 hover:underline font-medium"
+                            >
+                              Ghi nhận trả sách
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!window.confirm('Xác nhận đánh dấu mất cho phiếu này?')) return;
+                                try {
+                                  await borrowService.returnLoan(record.id, { mark_lost: true });
+                                  setRecords((prev) => prev.map((r) => (r.id === record.id ? { ...r, status: 'returned', returnedAt: new Date().toLocaleDateString(), fineAmount: (r.fineAmount || 0) + 0 } : r)));
+                                  alert('Đã đánh dấu mất và tạo phạt (nếu có)');
+                                } catch (err) {
+                                  console.error(err);
+                                  alert('Thao tác thất bại: ' + (err?.message || 'Unknown'));
+                                }
+                              }}
+                              className="text-xs px-2 py-1 rounded-md bg-rose-50 text-rose-700 border border-rose-100 hover:bg-rose-100"
+                            >
+                              Mark Lost
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!window.confirm('Xác nhận báo hư hỏng cho phiếu này?')) return;
+                                try {
+                                  await borrowService.returnLoan(record.id, { item_condition_on_return: 'DAMAGED' });
+                                  setRecords((prev) => prev.map((r) => (r.id === record.id ? { ...r, status: 'returned', returnedAt: new Date().toLocaleDateString() } : r)));
+                                  alert('Đã báo hư hỏng và tạo phạt (nếu có)');
+                                } catch (err) {
+                                  console.error(err);
+                                  alert('Thao tác thất bại: ' + (err?.message || 'Unknown'));
+                                }
+                              }}
+                              className="text-xs px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-100"
+                            >
+                              Report Damage
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
