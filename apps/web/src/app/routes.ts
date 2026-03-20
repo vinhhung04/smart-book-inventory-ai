@@ -21,11 +21,28 @@ import { UsersPage } from "@/components/pages/users";
 import { RolesPage } from "@/components/pages/roles";
 import { LoginPage } from "@/components/pages/login";
 import { RegisterPage } from "@/components/pages/register";
+import { CustomerLayout } from "@/components/pages/customer/layout";
+import { CustomerDashboardPage } from "@/components/pages/customer/dashboard";
+import { CustomerProfilePage } from "@/components/pages/customer/profile";
+import { CustomerMembershipPage } from "@/components/pages/customer/membership";
+import { CustomerLoginPage } from "@/components/pages/customer/login";
+import { CustomerRegisterPage } from "@/components/pages/customer/register";
+import { CustomerCatalogPage } from "@/components/pages/customer/catalog";
+import { CustomerBookDetailPage } from "@/components/pages/customer/book-detail";
+import { CustomerReservationsPage } from "@/components/pages/customer/reservations";
+import { CustomerLoansPage } from "@/components/pages/customer/loans";
+import { CustomerLoanDetailPage } from "@/components/pages/customer/loan-detail";
+import { CustomerFinesPage } from "@/components/pages/customer/fines";
+import { CustomerNotificationsPage } from "@/components/pages/customer/notifications";
 import { authService } from "@/services/auth";
 
-function requireAuthLoader() {
-  if (!authService.isAuthenticated()) {
+async function requireAuthLoader() {
+  const user = await authService.hydrateCurrentUser();
+  if (!user) {
     throw redirect("/login");
+  }
+  if (Array.isArray(user.roles) && user.roles.includes("CUSTOMER")) {
+    throw redirect("/customer");
   }
   return null;
 }
@@ -35,6 +52,27 @@ function publicOnlyLoader() {
     throw redirect("/");
   }
   return null;
+}
+
+async function requireCustomerAuthLoader() {
+  const user = await authService.hydrateCurrentUser();
+  if (!user) {
+    throw redirect('/customer/login');
+  }
+  if (!Array.isArray(user.roles) || !user.roles.includes('CUSTOMER')) {
+    throw redirect('/');
+  }
+  return null;
+}
+
+function customerPublicOnlyLoader() {
+  if (!authService.isAuthenticated()) {
+    return null;
+  }
+  if (authService.isCustomer()) {
+    throw redirect('/customer');
+  }
+  throw redirect('/');
 }
 
 export const router = createBrowserRouter([
@@ -47,6 +85,33 @@ export const router = createBrowserRouter([
     path: "/register",
     loader: publicOnlyLoader,
     Component: RegisterPage,
+  },
+  {
+    path: '/customer/login',
+    loader: customerPublicOnlyLoader,
+    Component: CustomerLoginPage,
+  },
+  {
+    path: '/customer/register',
+    loader: customerPublicOnlyLoader,
+    Component: CustomerRegisterPage,
+  },
+  {
+    path: '/customer',
+    loader: requireCustomerAuthLoader,
+    Component: CustomerLayout,
+    children: [
+      { index: true, Component: CustomerDashboardPage },
+      { path: 'profile', Component: CustomerProfilePage },
+      { path: 'membership', Component: CustomerMembershipPage },
+      { path: 'books', Component: CustomerCatalogPage },
+      { path: 'books/:id', Component: CustomerBookDetailPage },
+      { path: 'reservations', Component: CustomerReservationsPage },
+      { path: 'loans', Component: CustomerLoansPage },
+      { path: 'loans/:id', Component: CustomerLoanDetailPage },
+      { path: 'fines', Component: CustomerFinesPage },
+      { path: 'notifications', Component: CustomerNotificationsPage },
+    ],
   },
   {
     path: "/",

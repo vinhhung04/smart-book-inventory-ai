@@ -4,6 +4,7 @@ import axios, { AxiosInstance } from 'axios';
 const authBaseURL = import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:3002';
 const inventoryBaseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 const aiBaseURL = import.meta.env.VITE_AI_BASE_URL || 'http://localhost:8000';
+const gatewayBaseURL = import.meta.env.VITE_GATEWAY_BASE_URL || 'http://localhost:3000';
 
 const authAPI: AxiosInstance = axios.create({
   baseURL: authBaseURL,
@@ -26,6 +27,13 @@ const aiAPI: AxiosInstance = axios.create({
   },
 });
 
+const gatewayAPI: AxiosInstance = axios.create({
+  baseURL: gatewayBaseURL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
 // Add request interceptor to attach JWT token
 const addTokenInterceptor = (api: AxiosInstance) => {
   api.interceptors.request.use((config) => {
@@ -40,6 +48,7 @@ const addTokenInterceptor = (api: AxiosInstance) => {
 addTokenInterceptor(authAPI);
 addTokenInterceptor(inventoryAPI);
 addTokenInterceptor(aiAPI);
+addTokenInterceptor(gatewayAPI);
 
 export function getApiErrorMessage(error: unknown, fallback = 'Request failed'): string {
   if (axios.isAxiosError(error)) {
@@ -52,4 +61,4 @@ export function getApiErrorMessage(error: unknown, fallback = 'Request failed'):
   return fallback;
 }
 
-export { authAPI, inventoryAPI, aiAPI };
+export { authAPI, inventoryAPI, aiAPI, gatewayAPI };

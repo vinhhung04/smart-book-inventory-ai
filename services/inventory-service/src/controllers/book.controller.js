@@ -41,6 +41,8 @@ function mapBookSummary(book) {
           existing.quantity += currentQty;
         } else {
           locationMap.set(key, {
+            warehouse_id: stock.warehouse_id,
+            location_id: stock.location_id,
             warehouse_name: warehouseName,
             location_code: locationCode,
             quantity: currentQty,
@@ -57,6 +59,7 @@ function mapBookSummary(book) {
   const firstVariant = variants[0] || null;
   const locations = Array.from(locationMap.values()).sort((a, b) => b.quantity - a.quantity || a.label.localeCompare(b.label));
   const locationSummary = locations.length > 0 ? `${locations[0].label}${locations.length > 1 ? ` +${locations.length - 1}` : ''}` : '-';
+  const defaultLocation = locations[0] || null;
 
   return {
     id: book.id,
@@ -72,6 +75,10 @@ function mapBookSummary(book) {
     list_price: Number(firstVariant?.list_price || 0),
     unit_cost: Number(firstVariant?.unit_cost || 0),
     cover_image_url: firstVariant?.cover_image_url || null,
+    variant_id: firstVariant?.id || null,
+    default_warehouse_id: defaultLocation?.warehouse_id || null,
+    default_location_id: defaultLocation?.location_id || null,
+    reservable: Boolean(firstVariant?.id && defaultLocation?.warehouse_id && quantity > 0),
     location: locationSummary,
     locations,
     location_count: locations.length,
@@ -85,6 +92,12 @@ function mapBookSummary(book) {
 
 async function getAllBooks(req, res) {
   try {
+    const search = String(req.query?.search || req.query?.q || '').trim().toLowerCase();
+    const authorFilter = String(req.query?.author || '').trim().toLowerCase();
+    const categoryFilter = String(req.query?.category || '').trim().toLowerCase();
+    const publisherFilter = String(req.query?.publisher || '').trim().toLowerCase();
+    const availability = String(req.query?.availability || '').trim().toLowerCase();
+
     const books = await prisma.books.findMany({
       include: {
         publishers: {
@@ -139,7 +152,35 @@ async function getAllBooks(req, res) {
       orderBy: { updated_at: 'desc' },
     });
 
-    return res.json(books.map(mapBookSummary));
+    let rows = books.map(mapBookSummary);
+
+    if (search) {
+      rows = rows.filter((row) => {
+        const tokens = [row.title, row.author, row.category, row.publisher, row.isbn]
+          .map((v) => String(v || '').toLowerCase());
+        return tokens.some((token) => token.includes(search));
+      });
+    }
+
+    if (authorFilter) {
+      rows = rows.filter((row) => String(row.author || '').toLowerCase().includes(authorFilter));
+    }
+
+    if (categoryFilter) {
+      rows = rows.filter((row) => String(row.category || '').toLowerCase().includes(categoryFilter));
+    }
+
+    if (publisherFilter) {
+      rows = rows.filter((row) => String(row.publisher || '').toLowerCase().includes(publisherFilter));
+    }
+
+    if (availability === 'available') {
+      rows = rows.filter((row) => Number(row.quantity || 0) > 0);
+    } else if (availability === 'unavailable') {
+      rows = rows.filter((row) => Number(row.quantity || 0) <= 0);
+    }
+
+    return res.json(rows);
   } catch (error) {
     console.error('Error while fetching books:', error);
     return res.status(500).json({ message: 'Internal server error' });

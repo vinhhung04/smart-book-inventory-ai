@@ -43,8 +43,8 @@ export function Topbar() {
     .map((part) => part[0]?.toUpperCase() || "")
     .join("") || "AD";
 
-  const handleLogout = () => {
-    authService.logout();
+  const handleLogout = async () => {
+    await authService.logout();
     toast.success("Logged out");
     navigate("/login");
   };
@@ -143,7 +143,7 @@ export function Topbar() {
                   <p className="text-[13px]" style={{ fontWeight: 650 }}>{user?.full_name || user?.username || "User"}</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">{user?.email || ""}</p>
                 </div>
-                <button onClick={handleLogout} className="w-full px-4 py-2.5 text-left text-[12px] text-rose-600 hover:bg-rose-50/60 transition-colors flex items-center gap-2" style={{ fontWeight: 550 }}>
+                <button onClick={() => void handleLogout()} className="w-full px-4 py-2.5 text-left text-[12px] text-rose-600 hover:bg-rose-50/60 transition-colors flex items-center gap-2" style={{ fontWeight: 550 }}>
                   <LogOut className="w-3.5 h-3.5" /> Logout
                 </button>
               </motion.div>

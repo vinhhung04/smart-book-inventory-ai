@@ -3,7 +3,7 @@ import { inventoryAPI } from './api.ts';
 export type CustomerStatus = 'ACTIVE' | 'SUSPENDED' | 'BLOCKED' | 'INACTIVE';
 export type ReservationStatus = 'PENDING' | 'CONFIRMED' | 'READY_FOR_PICKUP' | 'CANCELLED' | 'EXPIRED' | 'CONVERTED_TO_LOAN';
 export type ReservationSource = 'WEB' | 'MOBILE' | 'COUNTER' | 'ADMIN';
-export type LoanStatus = 'RESERVED' | 'BORROWED' | 'RETURNED' | 'OVERDUE' | 'LOST' | 'CANCELLED';
+export type LoanStatus = 'RESERVED' | 'BORROWED' | 'RETURNED' | 'OVERDUE' | 'LOST' | 'CANCELLED' | 'DAMAGED';
 
 export interface Customer {
   id: string;
@@ -239,10 +239,10 @@ export const borrowService = {
     return response.data as { data: Loan };
   },
 
-  returnLoan: async (id: string, payload?: { loan_item_id?: string; returned_to_location_id?: string; item_condition_on_return?: string; notes?: string }, idempotencyKey?: string) => {
+  returnLoan: async (id: string, payload?: { loan_item_id?: string; returned_to_location_id?: string; item_condition_on_return?: string; notes?: string; mark_lost?: boolean }, idempotencyKey?: string) => {
     const response = await inventoryAPI.post(`/borrow/loans/${id}/return`, payload || {}, {
-      headers: createIdempotencyHeaders(idempotencyKey),
-    });
+        headers: createIdempotencyHeaders(idempotencyKey),
+      });
     return response.data as { data: Loan };
   },
 };

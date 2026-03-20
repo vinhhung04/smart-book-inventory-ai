@@ -63,6 +63,26 @@ app.use(
 );
 
 app.use(
+  "/my",
+  createProxyMiddleware({
+    target: borrowTarget,
+    changeOrigin: true,
+    xfwd: true,
+    pathRewrite: (path) => `/borrow/my${path}`,
+  }),
+);
+
+app.use(
+  "/catalog",
+  createProxyMiddleware({
+    target: inventoryTarget,
+    changeOrigin: true,
+    xfwd: true,
+    pathRewrite: (path) => `/api${path}`,
+  }),
+);
+
+app.use(
   "/ai",
   createProxyMiddleware({
     target: aiTarget,

@@ -37,6 +37,11 @@ interface TokenPayload {
   exp?: number;
 }
 
+export interface UpdateMeRequest {
+  full_name?: string;
+  email?: string;
+}
+
 const TOKEN_KEY = 'token';
 const USER_KEY = 'auth_user';
 
@@ -84,8 +89,33 @@ export const authService = {
     return response.data;
   },
 
-  logout: () => {
+  logout: async () => {
+    try {
+      await authAPI.post('/auth/logout');
+    } catch {
+      // Always clear local session even if server-side logout fails.
+    }
     clearSession();
+  },
+
+  getMe: async (): Promise<AuthUser> => {
+    const response = await authAPI.get('/auth/me');
+    const user = response.data?.user as AuthUser;
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token && user) {
+      setSession(token, user);
+    }
+    return user;
+  },
+
+  updateMe: async (data: UpdateMeRequest): Promise<AuthUser> => {
+    const response = await authAPI.patch('/auth/me', data);
+    const user = response.data?.user as AuthUser;
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token && user) {
+      setSession(token, user);
+    }
+    return user;
   },
 
   getToken: (): string | null => localStorage.getItem(TOKEN_KEY),
@@ -105,5 +135,23 @@ export const authService = {
     const payload = parseJwtPayload(token);
     if (!payload?.exp) return true;
     return payload.exp * 1000 > Date.now();
+  },
+
+  isCustomer: (): boolean => {
+    const user = authService.getCurrentUser();
+    return Array.isArray(user?.roles) && user.roles.includes('CUSTOMER');
+  },
+
+  hydrateCurrentUser: async (): Promise<AuthUser | null> => {
+    if (!authService.isAuthenticated()) {
+      return null;
+    }
+
+    try {
+      return await authService.getMe();
+    } catch {
+      clearSession();
+      return null;
+    }
   },
 };
