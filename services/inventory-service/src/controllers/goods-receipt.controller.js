@@ -16,10 +16,6 @@ function createReceiptNumber(baseTimestamp) {
   return `GR-${baseTimestamp}-${suffix}`;
 }
 
-function createMovementNumber(baseTimestamp, index) {
-  return `MV-${baseTimestamp}-${index + 1}`;
-}
-
 function parseId(value) {
   return String(value || '').trim() || null;
 }
@@ -177,9 +173,9 @@ async function createGoodsReceipt(req, res) {
   }
 
   for (const item of items) {
-    if (!item?.variant_id || !item?.location_id || !isPositiveInteger(item?.quantity)) {
+    if (!item?.variant_id || !isPositiveInteger(item?.quantity)) {
       return res.status(400).json({
-        message: 'Each item must include variant_id, location_id and quantity > 0',
+        message: 'Each item must include variant_id and quantity > 0',
       });
     }
 
@@ -236,7 +232,7 @@ async function createGoodsReceipt(req, res) {
       const receiptItemsData = items.map((item) => ({
         goods_receipt_id: goodsReceipt.id,
         variant_id: item.variant_id,
-        location_id: item.location_id,
+        location_id: item.location_id || null,
         quantity: item.quantity,
         unit_cost: item.unit_cost,
       }));
@@ -356,7 +352,6 @@ async function postDraftGoodsReceipt(tx, goodsReceipt, userId) {
     })),
   });
 }
-
 async function updateGoodsReceipt(req, res) {
   const id = parseId(req.params.id);
   const { status, note } = req.body;
@@ -390,10 +385,6 @@ async function updateGoodsReceipt(req, res) {
 
       if (existing.status === 'POSTED' && targetStatus === 'DRAFT') {
         return { invalidTransition: true, message: 'Cannot rollback POSTED receipt to DRAFT' };
-      }
-
-      if (existing.status === 'DRAFT' && targetStatus === 'POSTED') {
-        await postDraftGoodsReceipt(tx, existing, userId);
       }
 
       const updated = await tx.goods_receipts.update({
