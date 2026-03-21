@@ -4,6 +4,8 @@ import { customerCatalogService, CustomerCatalogBook } from '@/services/customer
 import { getApiErrorMessage } from '@/services/api';
 import { customerBorrowService } from '@/services/customer-borrow';
 import { toast } from 'sonner';
+import { CustomerStateBlock } from './_shared/customer-state-block';
+import { CustomerPageHeader } from './_shared/customer-page-header';
 
 export function CustomerBookDetailPage() {
   const { id } = useParams();
@@ -31,15 +33,15 @@ export function CustomerBookDetailPage() {
   }, [id]);
 
   if (loading) {
-    return <div className="p-6 rounded-[14px] border border-slate-200 bg-white text-slate-500">Loading book detail...</div>;
+    return <CustomerStateBlock mode="loading" message="Loading book detail..." />;
   }
 
   if (error) {
-    return <div className="p-6 rounded-[14px] border border-rose-200 bg-rose-50 text-rose-700">{error}</div>;
+    return <CustomerStateBlock mode="error" message={error} />;
   }
 
   if (!book) {
-    return <div className="p-6 rounded-[14px] border border-slate-200 bg-white text-slate-500">Book not found.</div>;
+    return <CustomerStateBlock mode="empty" message="Book not found." />;
   }
 
   const isAvailable = Number(book.quantity || 0) > 0;
@@ -69,10 +71,22 @@ export function CustomerBookDetailPage() {
   return (
     <div className="space-y-4">
       <NavLink to="/customer/books" className="text-[12px] text-indigo-600 hover:text-indigo-800" style={{ fontWeight: 600 }}>Back to catalog</NavLink>
-      <div className="rounded-[14px] border border-slate-200 bg-white p-6">
-        <h2 className="text-[22px] tracking-[-0.02em]" style={{ fontWeight: 700 }}>{book.title}</h2>
-        <p className="text-[13px] text-slate-500 mt-1">{book.subtitle || '-'}</p>
 
+      <CustomerPageHeader
+        title={book.title}
+        subtitle={book.subtitle || 'Book details and reservation status.'}
+        actions={
+          <button
+            onClick={() => void handleReserve()}
+            disabled={!book.reservable || !isAvailable || isReserving}
+            className="px-4 py-2.5 rounded-[10px] bg-indigo-600 text-white text-[13px] disabled:opacity-60"
+          >
+            {isReserving ? 'Reserving...' : 'Reserve This Book'}
+          </button>
+        }
+      />
+
+      <div className="rounded-[14px] border border-slate-200 bg-white p-6">
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-[13px]">
           <div><span className="text-slate-500">Author:</span> {book.author || '-'}</div>
           <div><span className="text-slate-500">Category:</span> {book.category || '-'}</div>
@@ -92,15 +106,11 @@ export function CustomerBookDetailPage() {
           <p className="text-[13px] text-slate-600 mt-2 whitespace-pre-line">{book.description || '-'}</p>
         </div>
 
-        <div className="mt-5 flex justify-end">
-          <button
-            onClick={() => void handleReserve()}
-            disabled={!book.reservable || !isAvailable || isReserving}
-            className="px-4 py-2.5 rounded-[10px] bg-indigo-600 text-white text-[13px] disabled:opacity-60"
-          >
-            {isReserving ? 'Reserving...' : 'Reserve This Book'}
-          </button>
-        </div>
+        {!book.reservable || !isAvailable ? (
+          <div className="mt-5 rounded-[10px] border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-700">
+            This item is currently unavailable for reservation.
+          </div>
+        ) : null}
       </div>
     </div>
   );

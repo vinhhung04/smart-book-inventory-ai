@@ -1,0 +1,28 @@
+import { ReactNode } from 'react';
+import { X } from 'lucide-react';
+
+interface DetailDrawerProps {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}
+
+export function DetailDrawer({ open, title, onClose, children }: DetailDrawerProps) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-slate-900/35" onClick={onClose} />
+      <div className="absolute right-0 top-0 h-full w-full max-w-md border-l border-slate-200 bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <h3 className="text-[15px] text-slate-900" style={{ fontWeight: 700 }}>{title}</h3>
+          <button onClick={onClose} className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-slate-200 text-slate-600 hover:bg-slate-50">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="h-[calc(100%-57px)] overflow-y-auto p-4">{children}</div>
+      </div>
+    </div>
+  );
+}

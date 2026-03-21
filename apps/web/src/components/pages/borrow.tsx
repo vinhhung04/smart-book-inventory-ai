@@ -94,7 +94,7 @@ export function BorrowPage() {
       </FadeItem>
 
       <FadeItem>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <Link to="/borrow/customers" className="group bg-white rounded-[14px] border border-slate-200 p-4 hover:border-rose-200 transition-all">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -120,6 +120,16 @@ export function BorrowPage() {
               <div>
                 <p className="text-[14px] text-slate-700" style={{ fontWeight: 650 }}>Manage Loans</p>
                 <p className="text-[12px] text-slate-400 mt-1">Convert reservation to loan and process return flow.</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-rose-600 transition-colors" />
+            </div>
+          </Link>
+
+          <Link to="/borrow/fines" className="group bg-white rounded-[14px] border border-slate-200 p-4 hover:border-rose-200 transition-all">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[14px] text-slate-700" style={{ fontWeight: 650 }}>Manage Fines</p>
+                <p className="text-[12px] text-slate-400 mt-1">View details, record payment, and waive/reduce fines.</p>
               </div>
               <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-rose-600 transition-colors" />
             </div>

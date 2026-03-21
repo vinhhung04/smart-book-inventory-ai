@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { customerService, CustomerProfile } from '@/services/customer';
 import { getApiErrorMessage } from '@/services/api';
 import { toast } from 'sonner';
+import { CustomerStateBlock } from './_shared/customer-state-block';
+import { SectionCard } from './_shared/section-card';
 
 export function CustomerProfilePage() {
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
@@ -57,52 +59,53 @@ export function CustomerProfilePage() {
   };
 
   if (isLoading) {
-    return <div className="p-6 rounded-[14px] border border-slate-200 bg-white text-slate-500">Loading profile...</div>;
+    return <CustomerStateBlock mode="loading" message="Loading profile..." />;
   }
 
   if (error) {
-    return <div className="p-6 rounded-[14px] border border-rose-200 bg-rose-50 text-rose-700">{error}</div>;
+    return <CustomerStateBlock mode="error" message={error} />;
   }
 
   if (!profile) {
-    return <div className="p-6 rounded-[14px] border border-slate-200 bg-white text-slate-500">Customer profile not found.</div>;
+    return <CustomerStateBlock mode="empty" message="Customer profile not found." />;
   }
 
   return (
-    <div className="rounded-[14px] border border-slate-200 bg-white p-6 max-w-3xl">
-      <div className="mb-5">
-        <h2 className="text-[20px] tracking-[-0.02em]" style={{ fontWeight: 700 }}>My Profile</h2>
-        <p className="text-[12px] text-slate-500 mt-1">Customer code: {profile.customer_code}</p>
-      </div>
+    <div className="space-y-4 max-w-3xl">
+      <SectionCard title="Personal Information" subtitle={`Customer code: ${profile.customer_code} | Keep your contact details up to date for reminders and account notifications.`}>
+        <div className="mb-5 rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] text-slate-500">
+          Email is managed by your account login and cannot be edited here.
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="md:col-span-2">
-          <label className="block text-[12px] text-slate-600 mb-1.5">Email</label>
-          <input value={profile.email || ''} disabled className="w-full px-3 py-2.5 rounded-[10px] border border-slate-200 bg-slate-50 text-[13px] text-slate-500" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-[11px] uppercase tracking-[0.04em] text-slate-400">Email</label>
+            <input value={profile.email || ''} disabled className="w-full px-3 py-2.5 rounded-[10px] border border-slate-200 bg-slate-50 text-[13px] text-slate-500" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[11px] uppercase tracking-[0.04em] text-slate-400">Full name</label>
+            <input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} className="w-full px-3 py-2.5 rounded-[10px] border border-slate-200 bg-white text-[13px] outline-none focus:ring-[3px] focus:ring-indigo-500/10 focus:border-indigo-300" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[11px] uppercase tracking-[0.04em] text-slate-400">Phone</label>
+            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2.5 rounded-[10px] border border-slate-200 bg-white text-[13px] outline-none focus:ring-[3px] focus:ring-indigo-500/10 focus:border-indigo-300" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[11px] uppercase tracking-[0.04em] text-slate-400">Birth date</label>
+            <input type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} className="w-full px-3 py-2.5 rounded-[10px] border border-slate-200 bg-white text-[13px] outline-none focus:ring-[3px] focus:ring-indigo-500/10 focus:border-indigo-300" />
+          </div>
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-[11px] uppercase tracking-[0.04em] text-slate-400">Address</label>
+            <textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} rows={3} className="w-full px-3 py-2.5 rounded-[10px] border border-slate-200 bg-white text-[13px] outline-none focus:ring-[3px] focus:ring-indigo-500/10 focus:border-indigo-300" />
+          </div>
         </div>
-        <div>
-          <label className="block text-[12px] text-slate-600 mb-1.5">Full name</label>
-          <input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} className="w-full px-3 py-2.5 rounded-[10px] border border-slate-200 bg-white text-[13px] outline-none focus:ring-[3px] focus:ring-indigo-500/10 focus:border-indigo-300" />
-        </div>
-        <div>
-          <label className="block text-[12px] text-slate-600 mb-1.5">Phone</label>
-          <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2.5 rounded-[10px] border border-slate-200 bg-white text-[13px] outline-none focus:ring-[3px] focus:ring-indigo-500/10 focus:border-indigo-300" />
-        </div>
-        <div>
-          <label className="block text-[12px] text-slate-600 mb-1.5">Birth date</label>
-          <input type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} className="w-full px-3 py-2.5 rounded-[10px] border border-slate-200 bg-white text-[13px] outline-none focus:ring-[3px] focus:ring-indigo-500/10 focus:border-indigo-300" />
-        </div>
-        <div className="md:col-span-2">
-          <label className="block text-[12px] text-slate-600 mb-1.5">Address</label>
-          <textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} rows={3} className="w-full px-3 py-2.5 rounded-[10px] border border-slate-200 bg-white text-[13px] outline-none focus:ring-[3px] focus:ring-indigo-500/10 focus:border-indigo-300" />
-        </div>
-      </div>
 
-      <div className="mt-5 flex justify-end">
-        <button onClick={() => void handleSave()} disabled={isSaving} className="px-4 py-2.5 rounded-[10px] bg-indigo-600 text-white text-[13px] disabled:opacity-60">
-          {isSaving ? 'Saving...' : 'Save Profile'}
-        </button>
-      </div>
+        <div className="mt-5 flex justify-end">
+          <button onClick={() => void handleSave()} disabled={isSaving} className="rounded-[10px] bg-indigo-600 px-4 py-2.5 text-[13px] text-white hover:bg-indigo-700 disabled:opacity-60" style={{ fontWeight: 600 }}>
+            {isSaving ? 'Saving...' : 'Save Profile'}
+          </button>
+        </div>
+      </SectionCard>
     </div>
   );
 }

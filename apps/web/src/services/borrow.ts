@@ -142,6 +142,62 @@ export interface Loan {
   };
 }
 
+export interface RenewalRequest {
+  request_id: string;
+  status: string;
+  requested_at: string;
+  reviewed_at: string | null;
+  requested_extension_days: number | null;
+  metadata: Record<string, unknown>;
+  customer: {
+    id: string;
+    customer_code: string;
+    full_name: string;
+    status: CustomerStatus;
+  } | null;
+  loan: Loan | null;
+}
+
+export interface FinePayment {
+  id: string;
+  fine_id: string;
+  payment_method: string;
+  amount: number;
+  transaction_reference: string | null;
+  paid_by_user_id: string | null;
+  paid_at: string;
+  note: string | null;
+}
+
+export interface FineSummary {
+  paid_amount: number;
+  remaining_balance: number;
+}
+
+export interface Fine {
+  id: string;
+  customer_id: string;
+  loan_item_id: string | null;
+  fine_type: string;
+  amount: number;
+  waived_amount: number;
+  status: string;
+  issued_by_user_id: string | null;
+  issued_at: string;
+  paid_at: string | null;
+  waived_by_user_id: string | null;
+  note: string | null;
+  customers?: {
+    id: string;
+    customer_code: string;
+    full_name: string;
+    status: CustomerStatus;
+    total_fine_balance?: number;
+  };
+  fine_payments?: FinePayment[];
+  summary?: FineSummary;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   meta: {
@@ -229,9 +285,35 @@ export const borrowService = {
     return response.data as { data: Loan; idempotent?: boolean };
   },
 
+  createDirectLoan: async (payload: ReservationPayload, idempotencyKey?: string) => {
+    const response = await inventoryAPI.post('/borrow/loans/direct', payload, {
+      headers: createIdempotencyHeaders(idempotencyKey),
+    });
+    return response.data as { data: Loan; idempotent?: boolean };
+  },
+
   getLoans: async (params?: Record<string, unknown>) => {
     const response = await inventoryAPI.get('/borrow/loans', { params });
     return response.data as PaginatedResponse<Loan>;
+  },
+
+  getRenewalRequests: async (params?: Record<string, unknown>) => {
+    const response = await inventoryAPI.get('/borrow/loans/renewal-requests', { params });
+    return response.data as PaginatedResponse<RenewalRequest>;
+  },
+
+  reviewLoanRenewal: async (loanId: string, payload: { decision: 'APPROVE' | 'REJECT'; extension_days?: number; reason?: string }) => {
+    const response = await inventoryAPI.post(`/borrow/loans/${loanId}/renewals/review`, payload);
+    return response.data as {
+      message: string;
+      data: {
+        loan_id: string;
+        request_id: string;
+        decision: 'APPROVE' | 'REJECT';
+        extension_days: number | null;
+        due_date: string;
+      };
+    };
   },
 
   getLoanById: async (id: string) => {
@@ -244,5 +326,44 @@ export const borrowService = {
         headers: createIdempotencyHeaders(idempotencyKey),
       });
     return response.data as { data: Loan };
+  },
+
+  getFines: async (params?: Record<string, unknown>) => {
+    const response = await inventoryAPI.get('/borrow/fines', { params });
+    return response.data as PaginatedResponse<Fine>;
+  },
+
+  getFineById: async (id: string) => {
+    const response = await inventoryAPI.get(`/borrow/fines/${id}`);
+    return response.data as { data: Fine };
+  },
+
+  recordFinePayment: async (id: string, payload: { amount: number; payment_method: 'CASH' | 'CARD' | 'TRANSFER' | 'EWALLET'; transaction_reference?: string; note?: string }) => {
+    const response = await inventoryAPI.post(`/borrow/fines/${id}/payments`, payload);
+    return response.data as {
+      message: string;
+      data: {
+        fine_id: string;
+        payment_id: string;
+        paid_amount: number;
+        remaining_balance: number;
+        status: string;
+        total_fine_balance: number;
+      };
+    };
+  },
+
+  waiveFine: async (id: string, payload: { amount?: number; note?: string }) => {
+    const response = await inventoryAPI.patch(`/borrow/fines/${id}/waive`, payload);
+    return response.data as {
+      message: string;
+      data: {
+        fine_id: string;
+        waived_amount: number;
+        remaining_balance: number;
+        status: string;
+        total_fine_balance: number;
+      };
+    };
   },
 };
