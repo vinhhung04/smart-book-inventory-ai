@@ -3,6 +3,10 @@ import { NavLink, useParams } from 'react-router';
 import { customerBorrowService } from '@/services/customer-borrow';
 import { getApiErrorMessage } from '@/services/api';
 import { toast } from 'sonner';
+import { CustomerStateBlock } from './_shared/customer-state-block';
+import { CustomerPageHeader } from './_shared/customer-page-header';
+import { formatDateTime } from './_shared/customer-format';
+import { getStatusTone } from './_shared/customer-status';
 
 export function CustomerLoanDetailPage() {
   const { id } = useParams();
@@ -43,19 +47,42 @@ export function CustomerLoanDetailPage() {
     }
   };
 
-  if (loading) return <div className="p-6 rounded-[14px] border border-slate-200 bg-white text-slate-500">Loading loan detail...</div>;
-  if (error) return <div className="p-6 rounded-[14px] border border-rose-200 bg-rose-50 text-rose-700">{error}</div>;
-  if (!loan) return <div className="p-6 rounded-[14px] border border-slate-200 bg-white text-slate-500">Loan not found.</div>;
+  if (loading) return <CustomerStateBlock mode="loading" message="Loading loan detail..." />;
+  if (error) return <CustomerStateBlock mode="error" message={error} />;
+  if (!loan) return <CustomerStateBlock mode="empty" message="Loan not found." />;
+
+  const loanStatus = String(loan.status || '').toUpperCase();
+  const canRequestRenewal = loanStatus === 'ACTIVE';
 
   return (
     <div className="space-y-4">
       <NavLink to="/customer/loans" className="text-[12px] text-indigo-600 hover:text-indigo-700" style={{ fontWeight: 600 }}>Back to loans</NavLink>
+
+      <CustomerPageHeader
+        title={loan.loan_number}
+        subtitle="Review due date, items, and submit renewal request when eligible."
+        actions={
+          <button
+            onClick={() => void handleRenewRequest()}
+            disabled={isSubmittingRenew || !canRequestRenewal}
+            className="px-4 py-2.5 rounded-[10px] bg-indigo-600 text-white text-[13px] disabled:opacity-60"
+            title={canRequestRenewal ? 'Request renewal' : 'Only active loans can request renewal'}
+          >
+            {isSubmittingRenew ? 'Submitting...' : 'Request Renewal'}
+          </button>
+        }
+      />
+
       <div className="rounded-[14px] border border-slate-200 bg-white p-6">
-        <h2 className="text-[20px]" style={{ fontWeight: 700 }}>{loan.loan_number}</h2>
         <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-[13px]">
-          <div><span className="text-slate-500">Status:</span> {loan.status}</div>
-          <div><span className="text-slate-500">Borrow date:</span> {new Date(loan.borrow_date).toLocaleString()}</div>
-          <div><span className="text-slate-500">Due date:</span> {new Date(loan.due_date).toLocaleString()}</div>
+          <div>
+            <span className="text-slate-500">Status:</span>{' '}
+            <span className={`inline-flex rounded-[8px] border px-2 py-0.5 text-[11px] ${getStatusTone(loan.status).className}`}>
+              {getStatusTone(loan.status).label}
+            </span>
+          </div>
+          <div><span className="text-slate-500">Borrow date:</span> {formatDateTime(loan.borrow_date)}</div>
+          <div><span className="text-slate-500">Due date:</span> {formatDateTime(loan.due_date)}</div>
           <div><span className="text-slate-500">Total items:</span> {loan.total_items}</div>
         </div>
 
@@ -68,18 +95,12 @@ export function CustomerLoanDetailPage() {
               {loan.loan_items.map((item: any) => (
                 <div key={item.id} className="rounded-[10px] border border-slate-200 p-3 text-[13px]">
                   <div><span className="text-slate-500">Variant:</span> {item.variant_id}</div>
-                  <div><span className="text-slate-500">Status:</span> {item.status}</div>
-                  <div><span className="text-slate-500">Due:</span> {new Date(item.due_date).toLocaleString()}</div>
+                  <div><span className="text-slate-500">Status:</span> {getStatusTone(item.status).label}</div>
+                  <div><span className="text-slate-500">Due:</span> {formatDateTime(item.due_date)}</div>
                 </div>
               ))}
             </div>
           )}
-        </div>
-
-        <div className="mt-5 flex justify-end">
-          <button onClick={() => void handleRenewRequest()} disabled={isSubmittingRenew} className="px-4 py-2.5 rounded-[10px] bg-indigo-600 text-white text-[13px] disabled:opacity-60">
-            {isSubmittingRenew ? 'Submitting...' : 'Request Renewal'}
-          </button>
         </div>
       </div>
     </div>

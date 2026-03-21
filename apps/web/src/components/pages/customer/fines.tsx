@@ -2,11 +2,22 @@ import { useEffect, useState } from 'react';
 import { customerBorrowService } from '@/services/customer-borrow';
 import { getApiErrorMessage } from '@/services/api';
 import { toast } from 'sonner';
+import { CustomerStateBlock } from './_shared/customer-state-block';
+import { formatCurrencyVnd, formatDateTime } from './_shared/customer-format';
+import { SectionCard } from './_shared/section-card';
+import { FineCard } from './_shared/fine-card';
+import { LoadingState } from './_shared/loading-state';
+import { EmptyState } from './_shared/empty-state';
+import { CustomerStatCard } from './_shared/customer-stat-card';
 
 export function CustomerFinesPage() {
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [payingFineId, setPayingFineId] = useState<string | null>(null);
+  const [topupAmount, setTopupAmount] = useState('50000');
+  const [isTopupLoading, setIsTopupLoading] = useState(false);
+  const [accountSnapshot, setAccountSnapshot] = useState<any | null>(null);
+  const [ledgerRows, setLedgerRows] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const loadFines = async () => {
@@ -15,6 +26,14 @@ export function CustomerFinesPage() {
       setError(null);
       const response = await customerBorrowService.getMyFines();
       setData(response?.data || null);
+
+      const [accountResponse, ledgerResponse] = await Promise.all([
+        customerBorrowService.getMyAccount(),
+        customerBorrowService.getMyAccountLedger({ page: 1, pageSize: 5 }),
+      ]);
+
+      setAccountSnapshot(accountResponse?.data || null);
+      setLedgerRows(Array.isArray(ledgerResponse?.data) ? ledgerResponse.data : []);
     } catch (err) {
       setError(getApiErrorMessage(err, 'Failed to load fines'));
     } finally {
@@ -59,61 +78,103 @@ export function CustomerFinesPage() {
     }
   };
 
-  if (loading) return <div className="p-6 rounded-[14px] border border-slate-200 bg-white text-slate-500">Loading fines...</div>;
-  if (error) return <div className="p-6 rounded-[14px] border border-rose-200 bg-rose-50 text-rose-700">{error}</div>;
+  const handleTopup = async () => {
+    const amount = Number(topupAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Topup amount must be greater than 0');
+      return;
+    }
+
+    try {
+      setIsTopupLoading(true);
+      await customerBorrowService.topupMyAccount({ amount, note: 'Topup from customer portal' });
+      toast.success('Wallet topup successful');
+      await loadFines();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Failed to topup wallet'));
+    } finally {
+      setIsTopupLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <LoadingState message="Loading fines..." />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <CustomerStateBlock mode="error" message={error} />
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-[14px] border border-slate-200 bg-white p-6">
-      <h2 className="text-[18px]" style={{ fontWeight: 700 }}>My Fines</h2>
-      <div className="mt-3 text-[14px]">
-        <span className="text-slate-500">Outstanding balance:</span>{' '}
-        <span style={{ fontWeight: 700 }}>{Number(data?.total_fine_balance || 0).toLocaleString('vi-VN')} VND</span>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <CustomerStatCard label="Outstanding balance" value={formatCurrencyVnd(data?.total_fine_balance)} />
+        <CustomerStatCard label="Wallet balance" value={formatCurrencyVnd(accountSnapshot?.available_balance)} />
+        <SectionCard title="Top up wallet" className="p-4">
+          <div className="flex items-center gap-2">
+            <input
+              value={topupAmount}
+              onChange={(event) => setTopupAmount(event.target.value)}
+              className="h-10 w-full rounded-[10px] border border-slate-200 px-3 text-[13px]"
+              inputMode="numeric"
+            />
+            <button
+              onClick={() => void handleTopup()}
+              disabled={isTopupLoading}
+              className="h-10 rounded-[10px] bg-indigo-600 px-3 text-[12px] text-white hover:bg-indigo-700 disabled:opacity-60"
+              style={{ fontWeight: 600 }}
+            >
+              {isTopupLoading ? 'Processing...' : 'Top up'}
+            </button>
+          </div>
+        </SectionCard>
       </div>
-      <div className="mt-4 text-[12px] text-slate-500">Fine records: {(data?.fines || []).length} | Payments: {(data?.fine_payments || []).length}</div>
 
-      <div className="mt-5 space-y-3">
-        {(data?.fines || []).length === 0 ? (
-          <div className="rounded-[12px] border border-slate-200 bg-slate-50 p-3 text-[13px] text-slate-500">No fines found.</div>
+      <SectionCard
+        title="Fine Records"
+        subtitle={`Fine records: ${(data?.fines || []).length} | Payments: ${(data?.fine_payments || []).length}`}
+      >
+        <div className="space-y-2.5">
+          {(data?.fines || []).length === 0 ? (
+            <EmptyState message="No fines found." />
+          ) : (
+            (data?.fines || []).map((fine: any) => (
+              <FineCard
+                key={fine.id}
+                fine={fine}
+                paying={payingFineId === String(fine.id)}
+                onPay={(item, mode) => void payFine(item, mode)}
+              />
+            ))
+          )}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Recent Wallet Ledger">
+        {ledgerRows.length === 0 ? (
+          <EmptyState message="No ledger entries yet." />
         ) : (
-          (data?.fines || []).map((fine: any) => {
-            const remaining = getRemainingBalance(fine);
-            const disabled = remaining <= 0 || payingFineId === String(fine.id);
-
-            return (
-              <div key={fine.id} className="rounded-[12px] border border-slate-200 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-[13px]" style={{ fontWeight: 700 }}>Type: {fine.fine_type}</div>
-                    <div className="text-[12px] text-slate-500">Status: {fine.status}</div>
-                    <div className="text-[12px] text-slate-500">Issued: {new Date(fine.issued_at).toLocaleString('vi-VN')}</div>
-                  </div>
-                  <div className="text-right text-[12px]">
-                    <div>Total: {Number(fine.amount || 0).toLocaleString('vi-VN')} VND</div>
-                    <div>Remaining: <span style={{ fontWeight: 700 }}>{remaining.toLocaleString('vi-VN')} VND</span></div>
-                  </div>
+          <div className="space-y-2.5">
+            {ledgerRows.map((entry) => (
+              <div key={entry.id} className="rounded-[10px] border border-slate-200 bg-white p-3 text-[12px] text-slate-600">
+                <div className="flex items-center justify-between gap-2">
+                  <div>{entry.entry_type || entry.reference_type || 'Entry'}</div>
+                  <div style={{ fontWeight: 700 }}>{formatCurrencyVnd(entry.amount)}</div>
                 </div>
-
-                <div className="mt-3 flex gap-2">
-                  <button
-                    disabled={disabled}
-                    onClick={() => void payFine(fine, 'PARTIAL')}
-                    className="rounded-[8px] border border-slate-300 px-3 py-1.5 text-[12px] disabled:opacity-60"
-                  >
-                    Pay 50%
-                  </button>
-                  <button
-                    disabled={disabled}
-                    onClick={() => void payFine(fine, 'FULL')}
-                    className="rounded-[8px] bg-emerald-600 px-3 py-1.5 text-[12px] text-white disabled:opacity-60"
-                  >
-                    Pay Full
-                  </button>
-                </div>
+                <div className="mt-1 text-[11px] text-slate-400">{formatDateTime(entry.created_at)}</div>
               </div>
-            );
-          })
+            ))}
+          </div>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }

@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { customerBorrowService } from '@/services/customer-borrow';
 import { getApiErrorMessage } from '@/services/api';
 import { toast } from 'sonner';
+import { CustomerStateBlock } from './_shared/customer-state-block';
+import { SectionCard } from './_shared/section-card';
+import { ReservationCard } from './_shared/reservation-card';
+import { LoadingState } from './_shared/loading-state';
+import { EmptyState } from './_shared/empty-state';
 
 export function CustomerReservationsPage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -35,42 +40,35 @@ export function CustomerReservationsPage() {
     }
   };
 
-  if (loading) return <div className="p-6 rounded-[14px] border border-slate-200 bg-white text-slate-500">Loading reservations...</div>;
-  if (error) return <div className="p-6 rounded-[14px] border border-rose-200 bg-rose-50 text-rose-700">{error}</div>;
-
   return (
-    <div className="rounded-[14px] border border-slate-200 bg-white overflow-hidden">
-      <div className="px-5 py-4 border-b border-slate-100">
-        <h2 className="text-[18px]" style={{ fontWeight: 700 }}>My Reservations</h2>
-      </div>
-      {rows.length === 0 ? (
-        <div className="p-6 text-[13px] text-slate-500">No reservations found.</div>
-      ) : (
-        <table className="w-full">
-          <thead>
-            <tr className="bg-slate-50/70 border-b border-slate-100">
-              <th className="text-left px-4 py-2.5 text-[11px] uppercase text-slate-500">Reservation</th>
-              <th className="text-left px-4 py-2.5 text-[11px] uppercase text-slate-500">Status</th>
-              <th className="text-left px-4 py-2.5 text-[11px] uppercase text-slate-500">Reserved At</th>
-              <th className="text-left px-4 py-2.5 text-[11px] uppercase text-slate-500">Expires At</th>
-              <th className="text-right px-4 py-2.5 text-[11px] uppercase text-slate-500"></th>
-            </tr>
-          </thead>
-          <tbody>
+    <div className="space-y-4">
+      <SectionCard
+        title="Reservations"
+        subtitle={`${rows.length} reservation(s)`}
+        actions={
+          <button
+            onClick={() => void load()}
+            className="rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-600 hover:bg-slate-50"
+            style={{ fontWeight: 600 }}
+          >
+            Refresh
+          </button>
+        }
+      >
+        {loading ? (
+          <LoadingState message="Loading reservations..." />
+        ) : error ? (
+          <CustomerStateBlock mode="error" message={error} />
+        ) : rows.length === 0 ? (
+          <EmptyState message="No reservations found." />
+        ) : (
+          <div className="space-y-2.5">
             {rows.map((row) => (
-              <tr key={row.id} className="border-b last:border-0 border-slate-50">
-                <td className="px-4 py-3 text-[13px]" style={{ fontWeight: 600 }}>{row.reservation_number}</td>
-                <td className="px-4 py-3 text-[13px] text-slate-600">{row.status}</td>
-                <td className="px-4 py-3 text-[12px] text-slate-500">{new Date(row.reserved_at).toLocaleString()}</td>
-                <td className="px-4 py-3 text-[12px] text-slate-500">{new Date(row.expires_at).toLocaleString()}</td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => void handleCancel(row.id)} className="text-[12px] text-rose-600 hover:text-rose-700" style={{ fontWeight: 600 }}>Cancel</button>
-                </td>
-              </tr>
+              <ReservationCard key={row.id} item={row} onCancel={(id) => void handleCancel(id)} />
             ))}
-          </tbody>
-        </table>
-      )}
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }

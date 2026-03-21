@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { customerService, MembershipInfo } from '@/services/customer';
 import { getApiErrorMessage } from '@/services/api';
+import { CustomerStateBlock } from './_shared/customer-state-block';
+import { CustomerStatCard } from './_shared/customer-stat-card';
+import { SectionCard } from './_shared/section-card';
+import { InfoCard } from './_shared/info-card';
 
 export function CustomerMembershipPage() {
   const [membership, setMembership] = useState<MembershipInfo | null>(null);
@@ -25,38 +29,37 @@ export function CustomerMembershipPage() {
   }, []);
 
   if (isLoading) {
-    return <div className="p-6 rounded-[14px] border border-slate-200 bg-white text-slate-500">Loading membership...</div>;
+    return <CustomerStateBlock mode="loading" message="Loading membership..." />;
   }
 
   if (error) {
-    return <div className="p-6 rounded-[14px] border border-rose-200 bg-rose-50 text-rose-700">{error}</div>;
+    return <CustomerStateBlock mode="error" message={error} />;
   }
 
   if (!membership) {
-    return <div className="p-6 rounded-[14px] border border-slate-200 bg-white text-slate-500">Membership not found.</div>;
+    return <CustomerStateBlock mode="empty" message="Membership not found." />;
   }
 
   return (
-    <div className="rounded-[14px] border border-slate-200 bg-white p-6">
-      <h2 className="text-[20px] tracking-[-0.02em]" style={{ fontWeight: 700 }}>My Membership</h2>
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-[13px]">
-        <div className="p-3 rounded-[10px] border border-slate-200 bg-slate-50">
-          <div className="text-slate-500 text-[12px]">Plan</div>
-          <div className="text-slate-900 mt-1" style={{ fontWeight: 600 }}>{membership.plan_name} ({membership.plan_code})</div>
-        </div>
-        <div className="p-3 rounded-[10px] border border-slate-200 bg-slate-50">
-          <div className="text-slate-500 text-[12px]">Max active loans</div>
-          <div className="text-slate-900 mt-1" style={{ fontWeight: 600 }}>{membership.limits.max_active_loans}</div>
-        </div>
-        <div className="p-3 rounded-[10px] border border-slate-200 bg-slate-50">
-          <div className="text-slate-500 text-[12px]">Max loan days</div>
-          <div className="text-slate-900 mt-1" style={{ fontWeight: 600 }}>{membership.limits.max_loan_days} days</div>
-        </div>
-        <div className="p-3 rounded-[10px] border border-slate-200 bg-slate-50">
-          <div className="text-slate-500 text-[12px]">Fine per day</div>
-          <div className="text-slate-900 mt-1" style={{ fontWeight: 600 }}>{membership.limits.fine_per_day}</div>
-        </div>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 text-[13px] md:grid-cols-2 lg:grid-cols-4">
+        <CustomerStatCard
+          label="Plan"
+          value={membership.plan_name}
+          hint={<span className="text-indigo-600">{membership.plan_code}</span>}
+        />
+        <CustomerStatCard label="Max active loans" value={membership.limits.max_active_loans} />
+        <CustomerStatCard label="Max loan days" value={`${membership.limits.max_loan_days} days`} />
+        <CustomerStatCard label="Fine per day" value={membership.limits.fine_per_day} />
       </div>
+
+      <SectionCard title="Additional Limits" subtitle="Policy details applied to your current membership plan.">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <InfoCard label="Renewal limit" value={`${membership.limits.max_renewal_count} times / loan`} />
+          <InfoCard label="Reservation hold" value={`${membership.limits.reservation_hold_hours} hours`} />
+          <InfoCard label="Lost item fee" value={`${membership.limits.lost_item_fee_multiplier}x base fee`} />
+        </div>
+      </SectionCard>
     </div>
   );
 }

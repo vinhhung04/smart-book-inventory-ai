@@ -64,6 +64,7 @@ export function BorrowReservationsPage() {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ReservationStatus>('ALL');
   const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<'RESERVATION' | 'DIRECT_LOAN'>('RESERVATION');
   const [formState, setFormState] = useState<ReservationFormState>(initialFormState);
   const [customerQuery, setCustomerQuery] = useState('');
   const [customerOptions, setCustomerOptions] = useState<CustomerLookupItem[]>([]);
@@ -301,21 +302,30 @@ export function BorrowReservationsPage() {
 
     try {
       setSaving(true);
-      await borrowService.createReservation({
+      const payload = {
         customer_id: formState.customer_id.trim(),
         variant_id: formState.variant_id.trim(),
         warehouse_id: formState.warehouse_id.trim(),
         pickup_location_id: formState.pickup_location_id.trim() || undefined,
         quantity: qty,
-        source_channel: formState.source_channel,
+        source_channel: formMode === 'DIRECT_LOAN' ? 'COUNTER' : formState.source_channel,
         notes: formState.notes.trim() || undefined,
-      });
-      toast.success('Reservation created successfully');
+      };
+
+      if (formMode === 'DIRECT_LOAN') {
+        await borrowService.createDirectLoan(payload);
+        toast.success('Direct loan created successfully');
+      } else {
+        await borrowService.createReservation(payload);
+        toast.success('Reservation created successfully');
+      }
+
       setFormOpen(false);
+      setFormMode('RESERVATION');
       setFormState(initialFormState);
       await loadReservations();
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Failed to create reservation'));
+      toast.error(getApiErrorMessage(error, formMode === 'DIRECT_LOAN' ? 'Failed to create direct loan' : 'Failed to create reservation'));
     } finally {
       setSaving(false);
     }
@@ -356,6 +366,7 @@ export function BorrowReservationsPage() {
           <button
             onClick={() => {
               setFormOpen(true);
+              setFormMode('RESERVATION');
               setFormState(initialFormState);
               setCustomerQuery('');
               setCustomerOptions([]);
@@ -370,6 +381,25 @@ export function BorrowReservationsPage() {
             style={{ fontWeight: 550 }}
           >
             <Plus className="w-4 h-4" /> New Reservation
+          </button>
+          <button
+            onClick={() => {
+              setFormOpen(true);
+              setFormMode('DIRECT_LOAN');
+              setFormState({ ...initialFormState, source_channel: 'COUNTER' });
+              setCustomerQuery('');
+              setCustomerOptions([]);
+              setVariantQuery('');
+              setVariantOptions([]);
+              setWarehouseQuery('');
+              setWarehouseOptions([]);
+              setPickupQuery('');
+              setPickupLocations([]);
+            }}
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-[10px] bg-white border border-slate-200 text-slate-700 text-[13px] shadow-sm hover:bg-slate-50 transition-all"
+            style={{ fontWeight: 550 }}
+          >
+            <Plus className="w-4 h-4" /> New Direct Loan
           </button>
         </div>
       </FadeItem>
@@ -481,7 +511,9 @@ export function BorrowReservationsPage() {
               exit={{ scale: 0.96, opacity: 0 }}
               className="bg-white rounded-[16px] p-6 w-full max-w-lg shadow-2xl"
             >
-              <h3 className="text-[16px] mb-4" style={{ fontWeight: 650 }}>New Reservation</h3>
+              <h3 className="text-[16px] mb-4" style={{ fontWeight: 650 }}>
+                {formMode === 'DIRECT_LOAN' ? 'New Direct Loan (Counter)' : 'New Reservation'}
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                 <label className="text-[12px] text-slate-600 md:col-span-2" style={{ fontWeight: 550 }}>
                   Customer (phone, name, email)*
@@ -695,6 +727,7 @@ export function BorrowReservationsPage() {
                 <label className="text-[12px] text-slate-600" style={{ fontWeight: 550 }}>
                   Source
                   <select value={formState.source_channel} onChange={(event) => setFormState((prev) => ({ ...prev, source_channel: event.target.value as ReservationSource }))}
+                    disabled={formMode === 'DIRECT_LOAN'}
                     className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-[8px] text-[13px] outline-none focus:ring-[2px] focus:ring-rose-500/15 focus:border-rose-300">
                     {(['WEB', 'MOBILE', 'COUNTER', 'ADMIN'] as const).map((source) => (
                       <option key={source} value={source}>{source}</option>
@@ -708,7 +741,10 @@ export function BorrowReservationsPage() {
                 </label>
               </div>
               <div className="flex items-center gap-3">
-                <button onClick={() => setFormOpen(false)} className="flex-1 px-4 py-2.5 rounded-[10px] border border-slate-200 bg-white text-slate-700 text-[13px] hover:bg-slate-50" style={{ fontWeight: 550 }}>
+                <button onClick={() => {
+                  setFormOpen(false);
+                  setFormMode('RESERVATION');
+                }} className="flex-1 px-4 py-2.5 rounded-[10px] border border-slate-200 bg-white text-slate-700 text-[13px] hover:bg-slate-50" style={{ fontWeight: 550 }}>
                   Cancel
                 </button>
                 <button
@@ -717,7 +753,7 @@ export function BorrowReservationsPage() {
                   className="flex-1 px-4 py-2.5 rounded-[10px] bg-gradient-to-r from-rose-600 to-pink-600 text-white text-[13px] shadow-md disabled:opacity-60"
                   style={{ fontWeight: 550 }}
                 >
-                  {saving ? 'Saving...' : 'Create'}
+                  {saving ? 'Saving...' : (formMode === 'DIRECT_LOAN' ? 'Create Direct Loan' : 'Create Reservation')}
                 </button>
               </div>
             </motion.div>

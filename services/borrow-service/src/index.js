@@ -7,6 +7,7 @@ const customerInternalRoutes = require('./routes/customer-internal.routes');
 const myRoutes = require('./routes/my.routes');
 const reservationRoutes = require('./routes/reservation.routes');
 const loanRoutes = require('./routes/loan.routes');
+const fineRoutes = require('./routes/fine.routes');
 const { startOverdueSweepJob } = require('./jobs/overdue.job');
 
 const app = express();
@@ -53,6 +54,7 @@ app.use('/borrow/customers', customerRoutes);
 app.use('/borrow/my', myRoutes);
 app.use('/borrow/reservations', reservationRoutes);
 app.use('/borrow/loans', loanRoutes);
+app.use('/borrow/fines', fineRoutes);
 
 app.use((err, req, res, next) => {
   if (err?.type === 'entity.too.large') {

@@ -17,6 +17,7 @@ import { BorrowCustomersPage } from "@/components/pages/borrow-customers";
 import { BorrowReservationsPage } from "@/components/pages/borrow-reservations";
 import { BorrowLoansPage } from "@/components/pages/borrow-loans";
 import { BorrowLoanDetailPage } from "@/components/pages/borrow-loan-detail";
+import { BorrowFinesPage } from "@/components/pages/borrow-fines";
 import { UsersPage } from "@/components/pages/users";
 import { RolesPage } from "@/components/pages/roles";
 import { LoginPage } from "@/components/pages/login";
@@ -134,6 +135,7 @@ export const router = createBrowserRouter([
       { path: "borrow/reservations", Component: BorrowReservationsPage },
       { path: "borrow/loans", Component: BorrowLoansPage },
       { path: "borrow/loans/:id", Component: BorrowLoanDetailPage },
+      { path: "borrow/fines", Component: BorrowFinesPage },
       { path: "users", Component: UsersPage },
       { path: "roles", Component: RolesPage },
       { path: "*", Component: DashboardPage },

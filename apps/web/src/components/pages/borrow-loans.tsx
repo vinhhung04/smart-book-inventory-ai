@@ -4,7 +4,7 @@ import { LoaderCircle, RefreshCcw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageWrapper, FadeItem } from '../motion-utils';
 import { StatusBadge } from '../status-badge';
-import { borrowService, type Loan, type LoanStatus } from '@/services/borrow';
+import { borrowService, type Loan, type LoanStatus, type RenewalRequest } from '@/services/borrow';
 import { getApiErrorMessage } from '@/services/api';
 
 const statuses: LoanStatus[] = ['RESERVED', 'BORROWED', 'RETURNED', 'OVERDUE', 'LOST', 'CANCELLED'];
@@ -19,6 +19,7 @@ function getVariant(status: LoanStatus) {
 
 export function BorrowLoansPage() {
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [renewalRequests, setRenewalRequests] = useState<RenewalRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | LoanStatus>('ALL');
@@ -26,8 +27,12 @@ export function BorrowLoansPage() {
   const loadLoans = async () => {
     try {
       setLoading(true);
-      const response = await borrowService.getLoans();
+      const [response, renewals] = await Promise.all([
+        borrowService.getLoans(),
+        borrowService.getRenewalRequests({ status: 'PENDING', pageSize: 20 }),
+      ]);
       setLoans(response.data ?? []);
+      setRenewalRequests(renewals.data ?? []);
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Failed to load loans'));
     } finally {
@@ -100,6 +105,23 @@ export function BorrowLoansPage() {
     }
   };
 
+  const reviewRenewal = async (loanId: string, decision: 'APPROVE' | 'REJECT') => {
+    const reason = decision === 'REJECT'
+      ? window.prompt('Reason for rejection (optional):', '') || undefined
+      : window.prompt('Reason for approval (optional):', '') || undefined;
+
+    try {
+      await borrowService.reviewLoanRenewal(loanId, {
+        decision,
+        reason,
+      });
+      toast.success(decision === 'APPROVE' ? 'Renewal approved' : 'Renewal rejected');
+      await loadLoans();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, decision === 'APPROVE' ? 'Failed to approve renewal' : 'Failed to reject renewal'));
+    }
+  };
+
   return (
     <PageWrapper className="space-y-5">
       <FadeItem>
@@ -141,6 +163,53 @@ export function BorrowLoansPage() {
               </button>
             ))}
           </div>
+        </div>
+      </FadeItem>
+
+      <FadeItem>
+        <div className="bg-white rounded-[16px] border border-white/80 overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.03)] p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-[14px] text-slate-700" style={{ fontWeight: 650 }}>Pending Renewal Requests</h2>
+            <p className="text-[12px] text-slate-400">{renewalRequests.length} request(s)</p>
+          </div>
+          {renewalRequests.length === 0 ? (
+            <p className="text-[12px] text-slate-500">No pending renewal requests.</p>
+          ) : (
+            <div className="space-y-2">
+              {renewalRequests.map((request) => (
+                <div key={request.request_id} className="border border-slate-100 rounded-[10px] px-3 py-2.5 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[13px] text-slate-800" style={{ fontWeight: 600 }}>
+                      {request.loan?.loan_number || request.loan?.id || 'Unknown loan'} - {request.customer?.full_name || request.customer?.customer_code || 'Unknown customer'}
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      Requested extension: {request.requested_extension_days ?? '-'} day(s) | Requested at {new Date(request.requested_at).toLocaleString('vi-VN')}
+                    </p>
+                  </div>
+                  {request.loan?.id ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => void reviewRenewal(request.loan!.id, 'APPROVE')}
+                        className="px-2.5 py-1 rounded-[6px] border border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] hover:bg-emerald-100 transition-all"
+                        style={{ fontWeight: 550 }}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => void reviewRenewal(request.loan!.id, 'REJECT')}
+                        className="px-2.5 py-1 rounded-[6px] border border-rose-200 bg-rose-50 text-rose-700 text-[11px] hover:bg-rose-100 transition-all"
+                        style={{ fontWeight: 550 }}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] text-slate-400">Invalid loan reference</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </FadeItem>
 
