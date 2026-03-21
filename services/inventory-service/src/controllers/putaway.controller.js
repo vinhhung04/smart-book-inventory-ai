@@ -553,9 +553,12 @@ async function confirmPutaway(req, res) {
         }
 
         const remainingQuantity = totalQuantity - putawayQuantity;
-        const remainingLocationId = fallbackLocation?.id || compartment?.id || null;
+        const remainingLocationId = remainingQuantity > 0 ? (fallbackLocation?.id || null) : null;
         if (remainingQuantity > 0 && !remainingLocationId) {
-          return { invalid: true, message: 'Remaining quantity requires RECEIVING/STAGING location or putaway quantity > 0' };
+          return {
+            invalid: true,
+            message: 'Remaining quantity must be moved to an active RECEIVING/STAGING location in this warehouse',
+          };
         }
 
         if (putawayQuantity > 0) {
@@ -582,7 +585,9 @@ async function confirmPutaway(req, res) {
 
         updates.push({
           item_id: itemId,
-          location_id: putawayQuantity > 0 ? compartment.id : remainingLocationId,
+          location_id: remainingQuantity > 0
+            ? remainingLocationId
+            : (putawayQuantity > 0 ? compartment.id : null),
         });
       }
 
@@ -607,8 +612,19 @@ async function confirmPutaway(req, res) {
       }
 
       const aggregatedBalanceEntries = aggregateBalanceEntries(postingEntries);
+      const availableIncrementMap = new Map();
+      postingEntries
+        .filter((entry) => entry.movement_bucket === 'PUTAWAY')
+        .forEach((entry) => {
+          const key = `${entry.variant_id}::${entry.location_id}`;
+          const current = availableIncrementMap.get(key) || 0;
+          availableIncrementMap.set(key, current + Number(entry.quantity || 0));
+        });
 
       for (const entry of aggregatedBalanceEntries) {
+        const key = `${entry.variant_id}::${entry.location_id}`;
+        const availableIncrement = Number(availableIncrementMap.get(key) || 0);
+
         await tx.stock_balances.upsert({
           where: {
             variant_id_location_id: {
@@ -618,7 +634,7 @@ async function confirmPutaway(req, res) {
           },
           update: {
             on_hand_qty: { increment: entry.quantity },
-            available_qty: { increment: entry.quantity },
+            available_qty: { increment: availableIncrement },
             version: { increment: 1 },
             last_movement_at: new Date(),
           },
@@ -627,7 +643,7 @@ async function confirmPutaway(req, res) {
             variant_id: entry.variant_id,
             location_id: entry.location_id,
             on_hand_qty: entry.quantity,
-            available_qty: entry.quantity,
+            available_qty: availableIncrement,
             version: 1,
             last_movement_at: new Date(),
           },

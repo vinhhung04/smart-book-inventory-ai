@@ -578,7 +578,7 @@ CREATE TABLE IF NOT EXISTS outbound_orders (
     outbound_type VARCHAR(30) NOT NULL
         CHECK (outbound_type IN ('SALE', 'DISPOSAL', 'RETURN_TO_SUPPLIER', 'MANUAL')),
     status VARCHAR(20) NOT NULL DEFAULT 'DRAFT'
-        CHECK (status IN ('DRAFT', 'APPROVED', 'PICKING', 'COMPLETED', 'CANCELLED')),
+        CHECK (status IN ('DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'PICKING', 'READY_FOR_OUTBOUND', 'COMPLETED', 'CANCELLED')),
     requested_by_user_id UUID NOT NULL,
     approved_by_user_id UUID,
     processed_by_user_id UUID,
@@ -606,7 +606,7 @@ CREATE TABLE IF NOT EXISTS transfer_orders (
     from_warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
     to_warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
     status VARCHAR(30) NOT NULL DEFAULT 'DRAFT'
-        CHECK (status IN ('DRAFT', 'REQUESTED', 'APPROVED', 'IN_TRANSIT', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED')),
+        CHECK (status IN ('DRAFT', 'REQUESTED', 'APPROVED', 'PICKING', 'READY_FOR_OUTBOUND', 'OUTBOUND_COMPLETED', 'IN_TRANSIT', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED')),
     requested_by_user_id UUID NOT NULL,
     approved_by_user_id UUID,
     shipped_by_user_id UUID,

@@ -23,6 +23,10 @@ import { RolesPage } from "@/components/pages/roles";
 import { PutawayPage } from "@/components/pages/putaway";
 import { PutawayDetailPage } from "@/components/pages/putaway-detail";
 import { PutawayExecutePage } from "@/components/pages/putaway-execute";
+import { ReceivingPutawayPage } from "@/components/pages/receiving-putaway";
+import { PickingPage } from "@/components/pages/picking";
+import { OrderRequestsPage } from "@/components/pages/order-requests";
+import { OutboundPage } from "@/components/pages/outbound";
 import { LoginPage } from "@/components/pages/login";
 import { RegisterPage } from "@/components/pages/register";
 import { CustomerLayout } from "@/components/pages/customer/layout";
@@ -132,7 +136,11 @@ export const router = createBrowserRouter([
       { path: "putaway", Component: PutawayPage },
       { path: "putaway/:id", Component: PutawayDetailPage },
       { path: "putaway/:id/execute", Component: PutawayExecutePage },
+      { path: "receiving-putaway", Component: ReceivingPutawayPage },
+      { path: "picking", Component: PickingPage },
+      { path: "order-requests", Component: OrderRequestsPage },
       { path: "movements", Component: MovementsPage },
+      { path: "outbound", Component: OutboundPage },
       { path: "warehouses", Component: WarehousesPage },
       { path: "shelves", Component: ShelvesPage },
       { path: "ai-import", Component: AIImportPage },

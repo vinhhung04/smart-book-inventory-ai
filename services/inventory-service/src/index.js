@@ -10,6 +10,10 @@ const stockMovementRoutes = require('./routes/stock-movement.routes');
 const borrowIntegrationRoutes = require('./routes/borrow-integration.routes');
 const putawayRoutes = require('./routes/putaway.routes');
 const shelfRoutes = require('./routes/shelf.routes');
+const receivingPutawayRoutes = require('./routes/receiving-putaway.routes');
+const pickingRoutes = require('./routes/picking.routes');
+const orderRequestRoutes = require('./routes/order-request.routes');
+const outboundRoutes = require('./routes/outbound.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +34,10 @@ app.use('/api/stock-movements', stockMovementRoutes);
 app.use('/api/borrow-integration', borrowIntegrationRoutes);
 app.use('/api/putaway', putawayRoutes);
 app.use('/api/shelves', shelfRoutes);
+app.use('/api/receiving-putaway', receivingPutawayRoutes);
+app.use('/api/picking', pickingRoutes);
+app.use('/api/order-requests', orderRequestRoutes);
+app.use('/api/outbound', outboundRoutes);
 
 // ─── GET /api/inventory ──────────────────────────────────────────────────────
 // Lấy danh sách toàn bộ sách kèm variants, số lượng tồn kho và vị trí kệ
