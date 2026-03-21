@@ -42,7 +42,7 @@ def generate_sql():
         for j in range(3):
             loc_id = str(uuid.uuid4())
             locations.append((wh_id, loc_id))
-            sql.append(f"INSERT INTO locations (id, warehouse_id, parent_location_id, location_code, location_type, zone, aisle, shelf, bin, barcode, capacity_qty, is_pickable, is_active) VALUES ('{loc_id}', '{wh_id}', '{shelf_a1_id}', 'A-01-0{j+1}', 'BIN', 'A', NULL, '01', '0{j+1}', 'LOC-A010{j+1}-{wh_id[-3:]}', 100, TRUE, TRUE) ON CONFLICT DO NOTHING;")
+            sql.append(f"INSERT INTO locations (id, warehouse_id, parent_location_id, location_code, location_type, zone, aisle, shelf, bin, barcode, capacity_qty, is_pickable, is_active) VALUES ('{loc_id}', '{wh_id}', '{shelf_a1_id}', 'A-01-0{j+1}', 'SHELF_COMPARTMENT', 'A', NULL, '01', '0{j+1}', 'LOC-A010{j+1}-{wh_id[-3:]}', 100, TRUE, TRUE) ON CONFLICT DO NOTHING;")
 
     # Books & Stock
     publisher_ids = ['00000000-0000-0000-0000-000000000401', '00000000-0000-0000-0000-000000000402']
