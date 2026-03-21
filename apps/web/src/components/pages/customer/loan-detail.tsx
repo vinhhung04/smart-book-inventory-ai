@@ -52,7 +52,7 @@ export function CustomerLoanDetailPage() {
   if (!loan) return <CustomerStateBlock mode="empty" message="Loan not found." />;
 
   const loanStatus = String(loan.status || '').toUpperCase();
-  const canRequestRenewal = loanStatus === 'ACTIVE';
+  const canRequestRenewal = ['BORROWED', 'OVERDUE'].includes(loanStatus);
 
   return (
     <div className="space-y-4">
@@ -66,7 +66,7 @@ export function CustomerLoanDetailPage() {
             onClick={() => void handleRenewRequest()}
             disabled={isSubmittingRenew || !canRequestRenewal}
             className="px-4 py-2.5 rounded-[10px] bg-indigo-600 text-white text-[13px] disabled:opacity-60"
-            title={canRequestRenewal ? 'Request renewal' : 'Only active loans can request renewal'}
+            title={canRequestRenewal ? 'Request renewal' : 'Only borrowed or overdue loans can request renewal'}
           >
             {isSubmittingRenew ? 'Submitting...' : 'Request Renewal'}
           </button>
