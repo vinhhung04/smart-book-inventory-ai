@@ -64,13 +64,67 @@ async function createWarehouse(req, res) {
   }
 
   try {
-    const warehouse = await prisma.warehouses.create({
-      data: {
-        name,
-        code,
-        warehouse_type: warehouse_type || 'WAREHOUSE',
-        address_line1: address_line1 || null,
-      },
+    const warehouse = await prisma.$transaction(async (tx) => {
+      const createdWarehouse = await tx.warehouses.create({
+        data: {
+          name,
+          code,
+          warehouse_type: warehouse_type || 'WAREHOUSE',
+          address_line1: address_line1 || null,
+        },
+      });
+
+      await tx.locations.create({
+        data: {
+          warehouse_id: createdWarehouse.id,
+          location_code: 'RECEIVING-01',
+          location_type: 'RECEIVING',
+          zone: 'RECEIVING',
+          is_pickable: false,
+          is_active: true,
+        },
+      });
+
+      const defaultZone = await tx.locations.create({
+        data: {
+          warehouse_id: createdWarehouse.id,
+          location_code: 'A',
+          location_type: 'ZONE',
+          zone: 'A',
+          is_pickable: true,
+          is_active: true,
+        },
+      });
+
+      const defaultShelf = await tx.locations.create({
+        data: {
+          warehouse_id: createdWarehouse.id,
+          parent_location_id: defaultZone.id,
+          location_code: 'A-01',
+          location_type: 'SHELF',
+          zone: 'A',
+          shelf: '01',
+          is_pickable: true,
+          is_active: true,
+        },
+      });
+
+      await tx.locations.create({
+        data: {
+          warehouse_id: createdWarehouse.id,
+          parent_location_id: defaultShelf.id,
+          location_code: 'A-01-01',
+          location_type: 'SHELF_COMPARTMENT',
+          zone: 'A',
+          shelf: '01',
+          bin: '01',
+          capacity_qty: 100,
+          is_pickable: true,
+          is_active: true,
+        },
+      });
+
+      return createdWarehouse;
     });
 
     return res.status(201).json(warehouse);

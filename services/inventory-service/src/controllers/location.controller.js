@@ -2,11 +2,12 @@ const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
-const LOCATION_TYPES = ['ZONE', 'SHELF', 'SHELF_COMPARTMENT'];
+const LOCATION_TYPES = ['ZONE', 'SHELF', 'SHELF_COMPARTMENT', 'BIN'];
 const ROOT_TYPES = ['ZONE'];
 const CHILD_TYPE_BY_PARENT = {
   ZONE: 'SHELF',
   SHELF: 'SHELF_COMPARTMENT',
+  SHELF_COMPARTMENT: 'BIN',
 };
 const MAX_SHELVES_PER_ZONE = 5;
 const MAX_COMPARTMENTS_PER_SHELF = 10;
@@ -62,14 +63,11 @@ function ensureLocationType(value) {
 }
 
 function toDbLocationType(type) {
-  const normalized = String(type || '').trim().toUpperCase();
-  // Backward compatibility: old DB check constraints may not include SHELF_COMPARTMENT.
-  return normalized === 'SHELF_COMPARTMENT' ? 'BIN' : normalized;
+  return String(type || '').trim().toUpperCase();
 }
 
 function fromDbLocationType(type) {
-  const normalized = String(type || '').trim().toUpperCase();
-  return normalized === 'BIN' ? 'SHELF_COMPARTMENT' : normalized;
+  return String(type || '').trim().toUpperCase();
 }
 
 function buildLocationLabel(location) {
@@ -243,7 +241,7 @@ function typeParts(type, code) {
     zone: normalizedType === 'ZONE' ? code : null,
     shelf: normalizedType === 'SHELF' ? code : null,
     aisle: null,
-    bin: normalizedType === 'SHELF_COMPARTMENT' ? code : null,
+    bin: (normalizedType === 'SHELF_COMPARTMENT' || normalizedType === 'BIN') ? code : null,
   };
 }
 

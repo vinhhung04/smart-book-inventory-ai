@@ -25,6 +25,40 @@ function parseId(value) {
   return String(value || '').trim() || null;
 }
 
+async function resolveOrCreateReceivingLocation(tx, warehouseId) {
+  const found = await tx.locations.findFirst({
+    where: {
+      warehouse_id: warehouseId,
+      is_active: true,
+      location_type: { in: ['RECEIVING', 'STAGING'] },
+    },
+    orderBy: { location_code: 'asc' },
+    select: {
+      id: true,
+      location_code: true,
+    },
+  });
+
+  if (found) return found;
+
+  const ts = Date.now();
+  const suffix = Math.random().toString(36).slice(2, 5).toUpperCase();
+  return tx.locations.create({
+    data: {
+      warehouse_id: warehouseId,
+      location_code: `RECEIVING-${ts}-${suffix}`,
+      location_type: 'RECEIVING',
+      zone: 'RECEIVING',
+      is_pickable: false,
+      is_active: true,
+    },
+    select: {
+      id: true,
+      location_code: true,
+    },
+  });
+}
+
 async function getGoodsReceipts(req, res) {
   try {
     const receipts = await prisma.goods_receipts.findMany({
@@ -361,6 +395,98 @@ async function postDraftGoodsReceipt(tx, goodsReceipt, userId) {
     })),
   });
 }
+
+async function postTransferReceiptToReceiving(tx, goodsReceipt, userId) {
+  const existingMovementCount = await tx.stock_movements.count({
+    where: {
+      reference_type: 'GOODS_RECEIPT',
+      reference_id: goodsReceipt.id,
+    },
+  });
+
+  if (existingMovementCount > 0) {
+    return;
+  }
+
+  const receivingLocation = await resolveOrCreateReceivingLocation(tx, goodsReceipt.warehouse_id);
+
+  const items = await tx.goods_receipt_items.findMany({
+    where: { goods_receipt_id: goodsReceipt.id },
+    select: {
+      variant_id: true,
+      quantity: true,
+      unit_cost: true,
+    },
+  });
+
+  if (items.length === 0) {
+    return;
+  }
+
+  const aggregateMap = new Map();
+  items.forEach((item) => {
+    const key = String(item.variant_id);
+    const current = aggregateMap.get(key);
+    if (!current) {
+      aggregateMap.set(key, {
+        variant_id: item.variant_id,
+        quantity: Number(item.quantity || 0),
+      });
+      return;
+    }
+    current.quantity += Number(item.quantity || 0);
+  });
+
+  const aggregatedItems = Array.from(aggregateMap.values());
+
+  for (const item of aggregatedItems) {
+    await tx.stock_balances.upsert({
+      where: {
+        variant_id_location_id: {
+          variant_id: item.variant_id,
+          location_id: receivingLocation.id,
+        },
+      },
+      update: {
+        on_hand_qty: { increment: item.quantity },
+        available_qty: 0,
+        version: { increment: 1 },
+        last_movement_at: new Date(),
+      },
+      create: {
+        warehouse_id: goodsReceipt.warehouse_id,
+        variant_id: item.variant_id,
+        location_id: receivingLocation.id,
+        on_hand_qty: item.quantity,
+        available_qty: 0,
+        version: 1,
+        last_movement_at: new Date(),
+      },
+    });
+  }
+
+  const baseTimestamp = Date.now();
+  await tx.stock_movements.createMany({
+    data: items.map((item, index) => ({
+      movement_number: createMovementNumber(baseTimestamp, index),
+      movement_type: 'INBOUND',
+      movement_status: 'POSTED',
+      warehouse_id: goodsReceipt.warehouse_id,
+      variant_id: item.variant_id,
+      to_location_id: receivingLocation.id,
+      quantity: item.quantity,
+      unit_cost: item.unit_cost,
+      source_service: 'INVENTORY_SERVICE',
+      reference_type: 'GOODS_RECEIPT',
+      reference_id: goodsReceipt.id,
+      created_by_user_id: userId,
+      metadata: {
+        source_type: 'TRANSFER',
+        bucket: 'RECEIVING_HOLD',
+      },
+    })),
+  });
+}
 async function updateGoodsReceipt(req, res) {
   const id = parseId(req.params.id);
   const { status, note } = req.body;
@@ -404,6 +530,10 @@ async function updateGoodsReceipt(req, res) {
           ...(targetStatus === 'POSTED' && !existing.received_at ? { received_at: new Date() } : {}),
         },
       });
+
+      if (targetStatus === 'POSTED' && existing.status !== 'POSTED' && existing.source_type === 'TRANSFER') {
+        await postTransferReceiptToReceiving(tx, updated, userId);
+      }
 
       return { data: updated };
     });
